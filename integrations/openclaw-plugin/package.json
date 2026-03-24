@@ -1,0 +1,12 @@
+{
+  "name": "@tak/ankicli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaw tool adapter over ankicli --json",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  }
+}

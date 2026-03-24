@@ -1,0 +1,26 @@
+{
+  "id": "ankicli",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "ankicliPath": {
+        "type": "string",
+        "description": "Path to the ankicli executable. Defaults to 'ankicli'."
+      },
+      "backend": {
+        "type": "string",
+        "enum": ["python-anki", "ankiconnect"],
+        "description": "Optional ankicli backend override."
+      },
+      "collectionPath": {
+        "type": "string",
+        "description": "Optional default collection path passed as --collection."
+      },
+      "ankiconnectUrl": {
+        "type": "string",
+        "description": "Optional ANKICONNECT_URL override for ankicli."
+      }
+    }
+  }
+}
