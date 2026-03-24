@@ -658,6 +658,217 @@ def test_build_report_merges_multiple_proof_reports(
             "source": "proof-report.json",
         },
     ]
+    assert report["phase3_readiness"] == {
+        "ready": True,
+        "blocking_command_count": 0,
+        "blocking_proof_counts": {},
+        "best_next_action": None,
+        "execution_plan": [],
+    }
+
+
+def test_build_report_phase3_readiness_counts_blocking_proofs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("ankicli.app.quality_matrix.implemented_commands", lambda: ["doctor.env"])
+    monkeypatch.setattr(
+        "ankicli.app.quality_matrix.summarize_backend_support",
+        lambda commands: {
+            "python-anki": {command: True for command in commands},
+            "ankiconnect": {},
+        },
+    )
+    tests_root = tmp_path / "tests"
+    tests_root.mkdir()
+    path = tests_root / "test_example.py"
+    path.write_text(
+        textwrap.dedent(
+            """
+            from tests.proof import proves
+
+            @proves("doctor.env", "unit")
+            def test_env():
+                assert True
+            """,
+        ).strip()
+        + "\n",
+    )
+    proof_report = _write_proof_report(
+        tmp_path,
+        f"""
+        {{
+          "collected_proofs": [
+            {{
+              "nodeid": "tests/test_example.py::test_env",
+              "file": "{path.resolve()}",
+              "test_name": "test_env",
+              "command": "doctor.env",
+              "proofs": ["unit"]
+            }}
+          ],
+          "collected_tests": [
+            {{
+              "file": "{path.resolve()}",
+              "test_name": "test_env"
+            }}
+          ],
+          "passed_nodeids": ["tests/test_example.py::test_env"]
+        }}
+        """,
+    )
+    matrix_path = _write_matrix(
+        tmp_path,
+        """
+        phase: phase2
+        commands:
+          - command: doctor.env
+            backend_scope: both
+            risk: read
+            required_proofs: [unit, cli_contract, failure]
+            not_applicable_proofs: []
+        """,
+    )
+
+    report = build_report(
+        matrix_path=matrix_path,
+        tests_root=tests_root,
+        proof_report_paths=[proof_report],
+    )
+
+    assert report["phase3_readiness"] == {
+        "ready": False,
+        "blocking_command_count": 1,
+        "blocking_proof_counts": {
+            "cli_contract": 1,
+            "failure": 1,
+        },
+        "best_next_action": {
+            "blocking_command_count": 1,
+            "commands": ["doctor.env"],
+            "missing_env": [],
+            "proofs": ["cli_contract", "failure"],
+            "requires_env": [],
+            "runner": None,
+            "runnable": True,
+            "tier": None,
+        },
+        "execution_plan": [
+            {
+                "blocking_command_count": 1,
+                "commands": ["doctor.env"],
+                "missing_env": [],
+                "proofs": ["cli_contract", "failure"],
+                "requires_env": [],
+                "runner": None,
+                "runnable": True,
+                "tier": None,
+            },
+        ],
+    }
+
+
+def test_build_report_marks_env_gated_execution_plan_steps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ANKI_SOURCE_PATH", raising=False)
+    monkeypatch.setattr(
+        "ankicli.app.quality_matrix.implemented_commands",
+        lambda: ["backup.status"],
+    )
+    monkeypatch.setattr(
+        "ankicli.app.quality_matrix.summarize_backend_support",
+        lambda commands: {
+            "python-anki": {command: True for command in commands},
+            "ankiconnect": {},
+        },
+    )
+    tests_root = tmp_path / "tests"
+    tests_root.mkdir()
+    path = tests_root / "test_example.py"
+    path.write_text(
+        textwrap.dedent(
+            """
+            from tests.proof import proves
+
+            @proves("backup.status", "unit", "cli_contract", "failure")
+            def test_backup_status():
+                assert True
+            """,
+        ).strip()
+        + "\n",
+    )
+    proof_report = _write_proof_report(
+        tmp_path,
+        f"""
+        {{
+          "collected_proofs": [
+            {{
+              "nodeid": "tests/test_example.py::test_backup_status",
+              "file": "{path.resolve()}",
+              "test_name": "test_backup_status",
+              "command": "backup.status",
+              "proofs": ["unit", "cli_contract", "failure"]
+            }}
+          ],
+          "collected_tests": [
+            {{
+              "file": "{path.resolve()}",
+              "test_name": "test_backup_status"
+            }}
+          ],
+          "passed_nodeids": ["tests/test_example.py::test_backup_status"]
+        }}
+        """,
+    )
+    matrix_path = _write_matrix(
+        tmp_path,
+        """
+        phase: phase2
+        commands:
+          - command: backup.status
+            backend_scope: python-anki
+            risk: read
+            required_proofs: [unit, cli_contract, failure, real_python_anki]
+            not_applicable_proofs: []
+        """,
+    )
+
+    report = build_report(
+        matrix_path=matrix_path,
+        tests_root=tests_root,
+        proof_report_paths=[proof_report],
+    )
+
+    assert report["phase3_readiness"]["best_next_action"] == {
+        "blocking_command_count": 1,
+        "commands": ["backup.status"],
+        "missing_env": ["ANKI_SOURCE_PATH"],
+        "proofs": ["real_python_anki"],
+        "requires_env": ["ANKI_SOURCE_PATH"],
+        "runner": (
+            "PYTEST_PLUGINS=ankicli.pytest_plugin uv run pytest -c pyproject.toml "
+            "-m backend_python_anki_backup_real --proof-report /tmp/real-python-anki.json"
+        ),
+        "runnable": False,
+        "tier": "real python-anki backup",
+    }
+    assert report["phase3_readiness"]["execution_plan"] == [
+        {
+            "blocking_command_count": 1,
+            "commands": ["backup.status"],
+            "missing_env": ["ANKI_SOURCE_PATH"],
+            "proofs": ["real_python_anki"],
+            "requires_env": ["ANKI_SOURCE_PATH"],
+            "runner": (
+                "PYTEST_PLUGINS=ankicli.pytest_plugin uv run pytest -c pyproject.toml "
+                "-m backend_python_anki_backup_real --proof-report /tmp/real-python-anki.json"
+            ),
+            "runnable": False,
+            "tier": "real python-anki backup",
+        },
+    ]
 
 
 def test_build_report_handles_missing_proof_report_as_audit_failure(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,32 @@ PROOF_TYPES = frozenset(
 BACKEND_SCOPES = frozenset({"python-anki", "ankiconnect", "both"})
 RISKS = frozenset({"read", "write", "destructive", "sync", "restore"})
 PHASES = ("phase1", "phase2", "phase3")
+PROOF_EXECUTION_HINTS = {
+    "fixture_integration": {
+        "runner": (
+            "PYTEST_PLUGINS=ankicli.pytest_plugin uv run pytest -c pyproject.toml "
+            "tests/integration/test_python_anki_backend.py --proof-report /tmp/fixture.json"
+        ),
+        "requires_env": [],
+        "tier": "fixture integration",
+    },
+    "real_python_anki": {
+        "runner": (
+            "PYTEST_PLUGINS=ankicli.pytest_plugin uv run pytest -c pyproject.toml "
+            "-m backend_python_anki_backup_real --proof-report /tmp/real-python-anki.json"
+        ),
+        "requires_env": ["ANKI_SOURCE_PATH"],
+        "tier": "real python-anki backup",
+    },
+    "safety": {
+        "runner": (
+            "PYTEST_PLUGINS=ankicli.pytest_plugin uv run pytest -c pyproject.toml "
+            "tests/integration/test_python_anki_backend.py --proof-report /tmp/fixture.json"
+        ),
+        "requires_env": [],
+        "tier": "fixture integration",
+    },
+}
 
 COMMAND_TO_OPERATION = {
     "doctor.backend": "doctor.backend",
@@ -443,6 +470,62 @@ def build_report(
         if remaining:
             missing_required[command] = remaining
 
+    phase3_blockers_by_proof: dict[str, int] = {}
+    phase3_blocking_commands_by_proof: dict[str, list[str]] = {}
+    for missing in missing_required.values():
+        for proof in missing:
+            phase3_blockers_by_proof[proof] = phase3_blockers_by_proof.get(proof, 0) + 1
+    for command, missing in missing_required.items():
+        for proof in missing:
+            phase3_blocking_commands_by_proof.setdefault(proof, []).append(command)
+    execution_plan_groups: dict[tuple[str | None, str | None], dict[str, Any]] = {}
+    for proof in sorted(phase3_blocking_commands_by_proof):
+        hint = PROOF_EXECUTION_HINTS.get(proof, {})
+        runner = hint.get("runner")
+        tier = hint.get("tier")
+        requires_env = tuple(sorted(hint.get("requires_env", [])))
+        key = (tier, runner, requires_env)
+        group = execution_plan_groups.setdefault(
+            key,
+            {
+                "tier": tier,
+                "runner": runner,
+                "requires_env": list(requires_env),
+                "proofs": [],
+                "blocking_commands": set(),
+            },
+        )
+        group["proofs"].append(proof)
+        group["blocking_commands"].update(phase3_blocking_commands_by_proof[proof])
+    execution_plan = [
+        {
+            "tier": item["tier"],
+            "runner": item["runner"],
+            "requires_env": item["requires_env"],
+            "missing_env": [
+                name for name in item["requires_env"] if not os.environ.get(name)
+            ],
+            "runnable": not any(
+                not os.environ.get(name) for name in item["requires_env"]
+            ),
+            "proofs": sorted(item["proofs"]),
+            "blocking_command_count": len(sorted(item["blocking_commands"])),
+            "commands": sorted(item["blocking_commands"]),
+        }
+        for item in sorted(
+            execution_plan_groups.values(),
+            key=lambda value: (
+                -len(value["blocking_commands"]),
+                value["tier"] or "",
+                value["runner"] or "",
+            ),
+        )
+    ]
+    best_next_action = execution_plan[0] if execution_plan else None
+    runnable_actions = [item for item in execution_plan if item["runnable"]]
+    if runnable_actions:
+        best_next_action = runnable_actions[0]
+
     phase_failures: list[str] = []
     if annotation_errors:
         phase_failures.extend(annotation_errors)
@@ -518,6 +601,16 @@ def build_report(
             command: sorted(values)
             for command, values in proof_sources_by_command.items()
         },
+        "phase3_readiness": {
+            "ready": not missing_required,
+            "blocking_command_count": len(missing_required),
+            "blocking_proof_counts": {
+                proof: phase3_blockers_by_proof[proof]
+                for proof in sorted(phase3_blockers_by_proof)
+            },
+            "best_next_action": best_next_action,
+            "execution_plan": execution_plan,
+        },
         "phase_failures": phase_failures,
         "ok": not phase_failures,
     }
@@ -554,6 +647,41 @@ def render_text(report: dict[str, Any]) -> str:
                 f"{item['source']}: commands={item['proved_commands']}, "
                 f"proofs={item['proved_proofs']}, passed_tests={item['passed_nodeids']}",
             )
+    lines.append("")
+    lines.append(
+        "Phase3 readiness: "
+        f"ready={report['phase3_readiness']['ready']}, "
+        f"blocking_commands={report['phase3_readiness']['blocking_command_count']}",
+    )
+    if report["phase3_readiness"]["blocking_proof_counts"]:
+        for proof, count in report["phase3_readiness"]["blocking_proof_counts"].items():
+            lines.append(f"  - {proof}: {count}")
+    if report["phase3_readiness"]["best_next_action"]:
+        action = report["phase3_readiness"]["best_next_action"]
+        lines.append(
+            "Best next action: "
+            f"proofs={','.join(action['proofs'])}, "
+            f"tier={action['tier']}, "
+            f"blocking_commands={action['blocking_command_count']}, "
+            f"runnable={action['runnable']}",
+        )
+        if action["missing_env"]:
+            lines.append(f"  missing_env={','.join(action['missing_env'])}")
+        if action["runner"]:
+            lines.append(f"  runner={action['runner']}")
+    if report["phase3_readiness"]["execution_plan"]:
+        lines.append("Phase3 execution plan:")
+        for item in report["phase3_readiness"]["execution_plan"]:
+            lines.append(
+                "  - "
+                f"proofs={','.join(item['proofs'])}: tier={item['tier']}, "
+                f"blocking_commands={item['blocking_command_count']}, "
+                f"runnable={item['runnable']}",
+            )
+            if item["missing_env"]:
+                lines.append(f"    missing_env={','.join(item['missing_env'])}")
+            if item["runner"]:
+                lines.append(f"    runner={item['runner']}")
     if report["stale_matrix_rows"]:
         lines.extend(
             ["", "Stale matrix rows:"]
@@ -602,6 +730,43 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"proofs=`{item['proved_proofs']}`, passed_tests=`{item['passed_nodeids']}`",
             )
         lines.append("")
+    lines.extend(["## Phase3 Readiness", ""])
+    lines.append(f"- Ready: `{report['phase3_readiness']['ready']}`")
+    lines.append(
+        f"- Blocking commands: `{report['phase3_readiness']['blocking_command_count']}`",
+    )
+    if report["phase3_readiness"]["blocking_proof_counts"]:
+        for proof, count in report["phase3_readiness"]["blocking_proof_counts"].items():
+            lines.append(f"- `{proof}`: `{count}`")
+    if report["phase3_readiness"]["best_next_action"]:
+        action = report["phase3_readiness"]["best_next_action"]
+        lines.append("")
+        lines.append("### Best Next Action")
+        lines.append("")
+        lines.append(
+            f"- proofs=`{', '.join(action['proofs'])}`: tier=`{action['tier']}`, "
+            f"blocking_commands=`{action['blocking_command_count']}`, "
+            f"runnable=`{action['runnable']}`",
+        )
+        if action["missing_env"]:
+            lines.append(f"  missing_env: `{', '.join(action['missing_env'])}`")
+        if action["runner"]:
+            lines.append(f"  runner: `{action['runner']}`")
+    if report["phase3_readiness"]["execution_plan"]:
+        lines.append("")
+        lines.append("### Execution Plan")
+        lines.append("")
+        for item in report["phase3_readiness"]["execution_plan"]:
+            lines.append(
+                f"- proofs=`{', '.join(item['proofs'])}`: tier=`{item['tier']}`, "
+                f"blocking_commands=`{item['blocking_command_count']}`, "
+                f"runnable=`{item['runnable']}`",
+            )
+            if item["missing_env"]:
+                lines.append(f"  missing_env: `{', '.join(item['missing_env'])}`")
+            if item["runner"]:
+                lines.append(f"  runner: `{item['runner']}`")
+    lines.append("")
     if report["stale_matrix_rows"]:
         lines.extend(["## Stale Matrix Rows", ""])
         lines.extend(f"- `{command}`" for command in report["stale_matrix_rows"])
