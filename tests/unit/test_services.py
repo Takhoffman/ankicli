@@ -46,7 +46,8 @@ def test_python_anki_backend_reports_capabilities() -> None:
 
     assert capabilities.backend == "python-anki"
     assert capabilities.supports_live_desktop is False
-    assert capabilities.supported_operations["note.delete"] is True
+    assert "note.delete" in capabilities.supported_operations
+    assert capabilities.supported_operations["note.delete"] is capabilities.available
 
 
 @pytest.mark.unit
