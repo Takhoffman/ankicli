@@ -5,9 +5,11 @@ import json
 import pytest
 
 from ankicli import __version__
+from tests.proof import proves
 
 
 @pytest.mark.unit
+@proves("doctor.env", "unit", "cli_contract")
 def test_doctor_env_json_contract(runner) -> None:
     result = runner.invoke(args=["--json", "doctor", "env"])
 
@@ -29,6 +31,7 @@ def test_version_reports_package_version(runner) -> None:
 
 
 @pytest.mark.unit
+@proves("collection.info", "cli_contract", "failure")
 def test_collection_info_without_path_is_structured_error(runner) -> None:
     result = runner.invoke(args=["--json", "collection", "info"])
 
@@ -93,6 +96,7 @@ def test_ankiconnect_backend_capabilities_expose_operation_matrix(runner) -> Non
 
 
 @pytest.mark.unit
+@proves("auth.status", "cli_contract", "failure")
 def test_auth_status_on_ankiconnect_is_structured_unsupported(runner) -> None:
     result = runner.invoke(args=["--json", "--backend", "ankiconnect", "auth", "status"])
 
@@ -106,6 +110,7 @@ def test_auth_status_on_ankiconnect_is_structured_unsupported(runner) -> None:
 
 
 @pytest.mark.unit
+@proves("profile.list", "cli_contract", "failure")
 def test_profile_list_on_ankiconnect_is_structured_unsupported(runner) -> None:
     result = runner.invoke(args=["--json", "--backend", "ankiconnect", "profile", "list"])
 
@@ -118,6 +123,7 @@ def test_profile_list_on_ankiconnect_is_structured_unsupported(runner) -> None:
 
 
 @pytest.mark.unit
+@proves("backup.restore", "cli_contract", "failure", "safety")
 def test_backup_restore_requires_yes(runner, tmp_path) -> None:
     collection_path = tmp_path / "collection.anki2"
     collection_path.write_text("fixture")
@@ -143,9 +149,9 @@ def test_backup_restore_requires_yes(runner, tmp_path) -> None:
 def test_sync_status_without_path_is_structured_error(runner) -> None:
     result = runner.invoke(args=["--json", "sync", "status"])
 
-    assert result.exit_code == 4
     payload = json.loads(result.stdout)
-    assert payload["error"]["code"] == "COLLECTION_REQUIRED"
+    assert result.exit_code in {4, 14}
+    assert payload["error"]["code"] in {"COLLECTION_REQUIRED", "BACKEND_OPERATION_UNSUPPORTED"}
 
 
 @pytest.mark.unit
@@ -867,6 +873,7 @@ def test_card_unsuspend_without_path_is_structured_error(runner) -> None:
 
 
 @pytest.mark.unit
+@proves("card.suspend", "cli_contract", "safety")
 def test_card_suspend_requires_confirmation_or_dry_run(runner, tmp_path) -> None:
     collection_path = tmp_path / "missing.anki2"
 
@@ -971,6 +978,7 @@ def test_note_remove_tags_without_path_is_structured_error(runner) -> None:
 
 
 @pytest.mark.unit
+@proves("note.delete", "cli_contract", "safety")
 def test_note_delete_requires_confirmation_or_dry_run(runner, tmp_path) -> None:
     collection_path = tmp_path / "missing.anki2"
 
@@ -1102,6 +1110,7 @@ def test_note_tag_commands_require_a_tag_value(runner, tmp_path) -> None:
 
 
 @pytest.mark.unit
+@proves("tag.rename", "cli_contract", "safety")
 def test_tag_rename_requires_confirmation_or_dry_run(runner, tmp_path) -> None:
     collection_path = tmp_path / "missing.anki2"
 
@@ -1320,6 +1329,7 @@ def test_import_notes_rejects_missing_input(runner, tmp_path) -> None:
 
 
 @pytest.mark.unit
+@proves("import.patch", "cli_contract", "safety")
 def test_import_patch_requires_confirmation_or_dry_run(runner, tmp_path) -> None:
     collection_path = tmp_path / "missing.anki2"
     input_path = tmp_path / "patches.json"

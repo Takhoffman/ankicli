@@ -28,6 +28,7 @@ service layer, JSON-first responses, and a backend seam present from day one.
 ## Test Policy
 
 - Unit tests for fast contract and logic coverage
+- Matrix-driven proof auditing is the primary command-adequacy gate
 - Smoke tests for the default local and CI loop
 - Fixture-integration tests against a repo-owned deterministic contract fixture by default
 - E2E tests through the editable installed CLI entrypoint
@@ -39,6 +40,18 @@ service layer, JSON-first responses, and a backend seam present from day one.
   profile
 - Live AnkiConnect integration is a separate opt-in local tier for validating the live-desktop
   backend against a running AnkiConnect server
+
+## Proof Matrix Policy
+
+- `ops/test-matrix.yaml` is the source of truth for required proof by command
+- `scripts/audit_quality_matrix.py` is the primary unified auditor
+- test proof is attached explicitly with `@proves("command.id", "proof_type", ...)`
+- backend capability reporting remains a sibling signal, not a required proof type
+- raw line/branch coverage remains supplemental and is not the primary adequacy gate
+- rollout starts at `phase1`:
+  - fail on malformed matrix state
+  - fail on stale matrix rows or stale proof annotations
+  - report missing proofs without blocking
 
 ## Development Policy
 

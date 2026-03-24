@@ -8,6 +8,7 @@ import pytest
 
 from ankicli.app.errors import BackendOperationUnsupportedError, NoteNotFoundError
 from ankicli.backends.ankiconnect import AnkiConnectBackend
+from tests.proof import proves
 
 
 class _FakeResponse:
@@ -85,6 +86,7 @@ def test_backend_capabilities_reports_unavailable_on_connection_failure(
 
 
 @pytest.mark.unit
+@proves("deck.list", "backend_unit")
 def test_list_decks_parses_deck_names_and_ids(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_http_connection(
         monkeypatch,

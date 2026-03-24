@@ -96,6 +96,7 @@ Fast path:
 
 ```bash
 uv run pytest -m "unit or smoke"
+uv run python scripts/audit_quality_matrix.py
 ```
 
 Targeted suites:
@@ -106,6 +107,7 @@ uv run pytest tests/e2e/test_cli_e2e.py
 uv run pytest -m distribution
 uv run pytest -m backend_python_anki_real
 uv run pytest -m backend_python_anki_backup_real
+uv run python scripts/audit_quality_matrix.py --markdown
 ```
 
 Disposable real backup tier:
@@ -128,6 +130,19 @@ Lint:
 ```bash
 uv run ruff check .
 ```
+
+Proof audit:
+
+```bash
+make test-matrix
+```
+
+The unified quality matrix is the primary proof audit:
+
+- `ops/test-matrix.yaml` is the command-level proof policy
+- `scripts/audit_quality_matrix.py` checks matrix rows, proof annotations, and missing proof
+- the default matrix phase is `phase1`, which reports proof gaps but fails only on malformed or
+  stale matrix/annotation state
 
 Build:
 

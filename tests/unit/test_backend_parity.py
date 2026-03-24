@@ -11,6 +11,7 @@ import pytest
 from ankicli.app.services import CatalogService, ExportService, ImportService, NoteService
 from ankicli.backends.ankiconnect import AnkiConnectBackend
 from ankicli.backends.python_anki import PythonAnkiBackend
+from tests.proof import proves
 
 
 class _FakeNote:
@@ -235,6 +236,7 @@ def test_shared_backend_capabilities_use_same_operation_keys(
 
 
 @pytest.mark.unit
+@proves("collection.info", "parity")
 def test_collection_info_shared_shape_parity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -261,6 +263,7 @@ def test_collection_info_shared_shape_parity(
 
 
 @pytest.mark.unit
+@proves("note.get", "parity")
 def test_note_get_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     collection_path = tmp_path / "collection.anki2"
     python_backend = _install_python_backend(monkeypatch, collection_path)
@@ -517,6 +520,7 @@ def test_note_move_deck_dry_run_shared_shape_parity(
 
 
 @pytest.mark.unit
+@proves("export.notes", "parity")
 def test_export_notes_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     collection_path = tmp_path / "collection.anki2"
     python_backend = _install_python_backend(monkeypatch, collection_path)
@@ -609,6 +613,7 @@ def test_import_notes_stdin_dry_run_shared_shape_parity(
 
 
 @pytest.mark.unit
+@proves("import.patch", "parity")
 def test_import_patch_stdin_dry_run_shared_shape_parity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

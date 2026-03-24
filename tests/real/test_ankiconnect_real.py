@@ -5,6 +5,8 @@ import os
 
 import pytest
 
+from tests.proof import proves
+
 
 def _require_live_ankiconnect(runner) -> dict:
     result = runner.invoke(args=["--json", "--backend", "ankiconnect", "backend", "info"])
@@ -36,6 +38,7 @@ def test_backend_info_live_ankiconnect(runner) -> None:
 
 
 @pytest.mark.backend_ankiconnect_real
+@proves("collection.info", "real_ankiconnect")
 def test_collection_info_live_ankiconnect(runner) -> None:
     _require_live_ankiconnect(runner)
 

@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from ankicli.runtime import configure_anki_source_path
+from tests.proof import proves
 
 
 def _require_real_python_anki() -> None:
@@ -102,6 +103,13 @@ def test_real_python_anki_runtime_exposes_backup_methods() -> None:
 
 
 @pytest.mark.backend_python_anki_backup_real
+@proves("backup.status", "real_python_anki")
+@proves("backup.list", "real_python_anki")
+@proves("backup.create", "real_python_anki")
+@proves("backup.get", "real_python_anki")
+@proves("profile.list", "real_python_anki")
+@proves("profile.default", "real_python_anki")
+@proves("profile.resolve", "real_python_anki")
 def test_profile_commands_with_disposable_root(
     runner,
     disposable_profile_root: dict[str, str | int],
@@ -157,6 +165,7 @@ def test_backup_status_list_create_and_get_real(
 
 
 @pytest.mark.backend_python_anki_backup_real
+@proves("backup.restore", "real_python_anki")
 def test_backup_restore_round_trip_real(
     runner,
     disposable_profile_root: dict[str, str | int],
@@ -214,6 +223,7 @@ def test_backup_restore_round_trip_real(
 
 
 @pytest.mark.backend_python_anki_backup_real
+@proves("deck.create", "real_python_anki")
 def test_real_risky_write_includes_auto_backup_metadata(
     runner,
     disposable_profile_root: dict[str, str | int],

@@ -1,0 +1,383 @@
+version: 1
+phase: phase1
+
+proof_sets:
+  read_basic: &read_basic [unit, cli_contract, failure]
+  read_shared: &read_shared [unit, cli_contract, fixture_integration, failure, parity]
+  read_py_real: &read_py_real [unit, cli_contract, failure, real_python_anki]
+  write_basic: &write_basic [unit, cli_contract, failure, safety]
+  write_shared: &write_shared [unit, cli_contract, fixture_integration, failure, safety, parity]
+  write_py: &write_py [unit, cli_contract, fixture_integration, failure, safety]
+  sync_status: &sync_status [unit, cli_contract, failure, real_python_anki]
+  sync_write: &sync_write [unit, cli_contract, failure, safety, real_python_anki]
+
+commands:
+  - command: doctor.env
+    backend_scope: both
+    risk: read
+    required_proofs: [unit, cli_contract]
+    not_applicable_proofs: [safety, parity]
+  - command: doctor.backend
+    backend_scope: both
+    risk: read
+    required_proofs: *read_basic
+    not_applicable_proofs: [safety]
+  - command: doctor.capabilities
+    backend_scope: both
+    risk: read
+    required_proofs: *read_basic
+    not_applicable_proofs: [safety]
+  - command: doctor.collection
+    backend_scope: python-anki
+    risk: read
+    required_proofs: *read_basic
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: doctor.safety
+    backend_scope: python-anki
+    risk: read
+    required_proofs: *read_basic
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+
+  - command: backend.list
+    backend_scope: both
+    risk: read
+    required_proofs: [unit, cli_contract]
+    not_applicable_proofs: [safety, parity]
+  - command: backend.info
+    backend_scope: both
+    risk: read
+    required_proofs: *read_basic
+    not_applicable_proofs: [safety]
+  - command: backend.capabilities
+    backend_scope: both
+    risk: read
+    required_proofs: *read_basic
+    not_applicable_proofs: [safety]
+  - command: backend.test-connection
+    backend_scope: both
+    risk: read
+    required_proofs: *read_basic
+    not_applicable_proofs: [safety]
+
+  - command: auth.status
+    backend_scope: python-anki
+    risk: read
+    required_proofs: [unit, cli_contract, backend_unit, failure]
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: auth.login
+    backend_scope: python-anki
+    risk: write
+    required_proofs: [unit, cli_contract, backend_unit, failure, safety]
+    not_applicable_proofs: [parity, real_ankiconnect]
+  - command: auth.logout
+    backend_scope: python-anki
+    risk: write
+    required_proofs: [unit, cli_contract, backend_unit, failure, safety]
+    not_applicable_proofs: [parity, real_ankiconnect]
+
+  - command: profile.list
+    backend_scope: python-anki
+    risk: read
+    required_proofs: *read_py_real
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: profile.get
+    backend_scope: python-anki
+    risk: read
+    required_proofs: *read_py_real
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: profile.default
+    backend_scope: python-anki
+    risk: read
+    required_proofs: *read_py_real
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: profile.resolve
+    backend_scope: python-anki
+    risk: read
+    required_proofs: *read_py_real
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+
+  - command: backup.status
+    backend_scope: python-anki
+    risk: read
+    required_proofs: *read_py_real
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: backup.list
+    backend_scope: python-anki
+    risk: read
+    required_proofs: *read_py_real
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: backup.create
+    backend_scope: python-anki
+    risk: write
+    required_proofs: [unit, cli_contract, backend_unit, failure, safety, real_python_anki]
+    not_applicable_proofs: [parity, real_ankiconnect]
+  - command: backup.get
+    backend_scope: python-anki
+    risk: read
+    required_proofs: *read_py_real
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: backup.restore
+    backend_scope: python-anki
+    risk: restore
+    required_proofs: [unit, cli_contract, backend_unit, failure, safety, real_python_anki]
+    not_applicable_proofs: [parity, real_ankiconnect]
+
+  - command: collection.info
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: collection.stats
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: collection.validate
+    backend_scope: python-anki
+    risk: read
+    required_proofs: [unit, cli_contract, fixture_integration, failure]
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: collection.lock-status
+    backend_scope: python-anki
+    risk: read
+    required_proofs: [unit, cli_contract, fixture_integration, failure]
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+
+  - command: deck.list
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: deck.get
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: deck.stats
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: deck.create
+    backend_scope: python-anki
+    risk: write
+    required_proofs: *write_py
+    not_applicable_proofs: [parity, real_ankiconnect]
+  - command: deck.rename
+    backend_scope: python-anki
+    risk: write
+    required_proofs: *write_py
+    not_applicable_proofs: [parity, real_ankiconnect]
+  - command: deck.delete
+    backend_scope: python-anki
+    risk: destructive
+    required_proofs: *write_py
+    not_applicable_proofs: [parity, real_ankiconnect]
+  - command: deck.reparent
+    backend_scope: python-anki
+    risk: write
+    required_proofs: *write_py
+    not_applicable_proofs: [parity, real_ankiconnect]
+
+  - command: model.list
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: model.get
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: model.fields
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: model.templates
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: model.validate-note
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+
+  - command: media.list
+    backend_scope: python-anki
+    risk: read
+    required_proofs: [unit, cli_contract, fixture_integration, failure]
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: media.check
+    backend_scope: python-anki
+    risk: read
+    required_proofs: [unit, cli_contract, fixture_integration, failure]
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: media.attach
+    backend_scope: python-anki
+    risk: write
+    required_proofs: *write_py
+    not_applicable_proofs: [parity, real_ankiconnect]
+  - command: media.orphaned
+    backend_scope: python-anki
+    risk: read
+    required_proofs: [unit, cli_contract, fixture_integration, failure]
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: media.resolve-path
+    backend_scope: python-anki
+    risk: read
+    required_proofs: [unit, cli_contract, fixture_integration, failure]
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+
+  - command: search.notes
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: search.cards
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: search.count
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: search.preview
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+
+  - command: export.notes
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: export.cards
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: import.notes
+    backend_scope: both
+    risk: write
+    required_proofs: *write_shared
+    not_applicable_proofs: []
+  - command: import.patch
+    backend_scope: both
+    risk: write
+    required_proofs: *write_shared
+    not_applicable_proofs: []
+
+  - command: sync.status
+    backend_scope: python-anki
+    risk: sync
+    required_proofs: *sync_status
+    not_applicable_proofs: [parity, real_ankiconnect, safety]
+  - command: sync.run
+    backend_scope: python-anki
+    risk: sync
+    required_proofs: *sync_write
+    not_applicable_proofs: [parity, real_ankiconnect]
+  - command: sync.pull
+    backend_scope: python-anki
+    risk: sync
+    required_proofs: *sync_write
+    not_applicable_proofs: [parity, real_ankiconnect]
+  - command: sync.push
+    backend_scope: python-anki
+    risk: sync
+    required_proofs: *sync_write
+    not_applicable_proofs: [parity, real_ankiconnect]
+
+  - command: note.get
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: note.fields
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: note.add
+    backend_scope: both
+    risk: write
+    required_proofs: *write_shared
+    not_applicable_proofs: []
+  - command: note.update
+    backend_scope: both
+    risk: write
+    required_proofs: *write_shared
+    not_applicable_proofs: []
+  - command: note.delete
+    backend_scope: python-anki
+    risk: destructive
+    required_proofs: *write_py
+    not_applicable_proofs: [parity, real_ankiconnect]
+  - command: note.move-deck
+    backend_scope: both
+    risk: write
+    required_proofs: *write_shared
+    not_applicable_proofs: []
+  - command: note.add-tags
+    backend_scope: both
+    risk: write
+    required_proofs: *write_shared
+    not_applicable_proofs: []
+  - command: note.remove-tags
+    backend_scope: both
+    risk: write
+    required_proofs: *write_shared
+    not_applicable_proofs: []
+
+  - command: card.get
+    backend_scope: both
+    risk: read
+    required_proofs: *read_shared
+    not_applicable_proofs: [safety]
+  - command: card.suspend
+    backend_scope: both
+    risk: write
+    required_proofs: *write_shared
+    not_applicable_proofs: []
+  - command: card.unsuspend
+    backend_scope: both
+    risk: write
+    required_proofs: *write_shared
+    not_applicable_proofs: []
+
+  - command: tag.list
+    backend_scope: both
+    risk: read
+    required_proofs: [unit, cli_contract, fixture_integration, failure]
+    not_applicable_proofs: [safety]
+  - command: tag.apply
+    backend_scope: both
+    risk: write
+    required_proofs: *write_shared
+    not_applicable_proofs: []
+  - command: tag.remove
+    backend_scope: both
+    risk: write
+    required_proofs: *write_shared
+    not_applicable_proofs: []
+  - command: tag.rename
+    backend_scope: python-anki
+    risk: write
+    required_proofs: *write_py
+    not_applicable_proofs: [parity, real_ankiconnect]
+  - command: tag.delete
+    backend_scope: python-anki
+    risk: destructive
+    required_proofs: *write_py
+    not_applicable_proofs: [parity, real_ankiconnect]
+  - command: tag.reparent
+    backend_scope: python-anki
+    risk: write
+    required_proofs: *write_py
+    not_applicable_proofs: [parity, real_ankiconnect]

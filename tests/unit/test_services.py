@@ -35,6 +35,7 @@ from ankicli.app.services import (
 )
 from ankicli.backends.python_anki import PythonAnkiBackend
 from ankicli.runtime import configure_anki_source_path
+from tests.proof import proves
 
 
 @pytest.mark.unit
@@ -238,18 +239,44 @@ def test_auth_logout_deletes_stored_credential(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.unit
-def test_sync_status_requires_credentials() -> None:
+@proves("sync.status", "unit", "failure")
+def test_sync_status_requires_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = PythonAnkiBackend()
     store = _FakeCredentialStore()
+    monkeypatch.setattr(
+        backend,
+        "backend_capabilities",
+        lambda: BackendCapabilities(
+            backend="python-anki",
+            available=True,
+            supports_collection_reads=True,
+            supports_collection_writes=True,
+            supports_live_desktop=False,
+            supported_operations={"sync.status": True},
+        ),
+    )
 
     with pytest.raises(AuthRequiredError):
         SyncService(backend, credential_store=store).status("/tmp/test.anki2")
 
 
 @pytest.mark.unit
+@proves("sync.run", "unit")
 def test_sync_run_delegates_with_stored_credential(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = PythonAnkiBackend()
     store = _FakeCredentialStore(SyncCredential(hkey="abc"))
+    monkeypatch.setattr(
+        backend,
+        "backend_capabilities",
+        lambda: BackendCapabilities(
+            backend="python-anki",
+            available=True,
+            supports_collection_reads=True,
+            supports_collection_writes=True,
+            supports_live_desktop=False,
+            supported_operations={"sync.run": True},
+        ),
+    )
     monkeypatch.setattr(
         backend,
         "sync_run",
@@ -277,6 +304,7 @@ def test_sync_run_delegates_with_stored_credential(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.unit
+@proves("backup.list", "unit")
 def test_backup_list_normalizes_backups(tmp_path: Path) -> None:
     root = tmp_path / "Anki2"
     profile_dir = root / "User 1"
@@ -298,6 +326,7 @@ def test_backup_list_normalizes_backups(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+@proves("backup.create", "unit")
 def test_backup_create_detects_new_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     root = tmp_path / "Anki2"
     profile_dir = root / "User 1"
@@ -323,6 +352,7 @@ def test_backup_create_detects_new_file(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
 
 @pytest.mark.unit
+@proves("backup.create", "unit")
 def test_backup_create_detects_overwritten_existing_file(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -356,6 +386,7 @@ def test_backup_create_detects_overwritten_existing_file(
 
 
 @pytest.mark.unit
+@proves("backup.restore", "unit", "failure", "safety")
 def test_backup_restore_blocks_when_lock_detected(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

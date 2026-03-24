@@ -21,6 +21,7 @@ from ankicli.app.errors import (
     ValidationError,
 )
 from ankicli.backends.python_anki import PythonAnkiBackend
+from tests.proof import proves
 
 
 class _FakeNote:
@@ -324,6 +325,7 @@ def test_auth_status_reports_credential_presence(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.unit
+@proves("auth.login", "backend_unit")
 def test_login_uses_sync_login_and_returns_sync_credential(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -352,6 +354,7 @@ def test_login_uses_sync_login_and_returns_sync_credential(
 
 
 @pytest.mark.unit
+@proves("sync.status", "backend_unit")
 def test_sync_status_normalizes_required_state(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -391,6 +394,7 @@ def test_sync_status_normalizes_required_state(
 
 
 @pytest.mark.unit
+@proves("sync.run", "backend_unit", "failure")
 def test_sync_run_raises_conflict_on_full_sync_requirement(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
