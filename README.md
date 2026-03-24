@@ -144,6 +144,7 @@ The unified quality matrix is the primary proof audit:
 - `ops/test-matrix.yaml` is the command-level proof policy
 - `scripts/audit_quality_matrix.py` checks matrix rows, collectable proof annotations, and executed proof from a pytest `--proof-report` JSON artifact
 - `--proof-report` is repeatable, so higher-phase audits can aggregate multiple pytest runs
+- aggregated audits now print a per-report proof summary, so you can see which tier contributed which proof
 - the default matrix phase is `phase2`
 - `phase3` should only be used when the required real-backend proof tiers are actually executed
 - `make test-matrix-phase3` is the explicit higher-assurance path: it runs fast-path, fixture integration, and the disposable real `python-anki` backup tier, then audits them together under `phase3`

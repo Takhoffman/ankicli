@@ -640,6 +640,24 @@ def test_build_report_merges_multiple_proof_reports(
 
     assert report["ok"] is True
     assert report["proofs_by_command"]["doctor.env"] == ["cli_contract", "unit"]
+    assert report["proof_sources_by_command"]["doctor.env"] == [
+        "proof-report-two.json",
+        "proof-report.json",
+    ]
+    assert report["proof_report_summaries"] == [
+        {
+            "passed_nodeids": 1,
+            "proved_commands": 1,
+            "proved_proofs": 1,
+            "source": "proof-report-two.json",
+        },
+        {
+            "passed_nodeids": 1,
+            "proved_commands": 1,
+            "proved_proofs": 1,
+            "source": "proof-report.json",
+        },
+    ]
 
 
 def test_build_report_handles_missing_proof_report_as_audit_failure(

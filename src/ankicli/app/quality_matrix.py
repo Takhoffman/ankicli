@@ -122,6 +122,7 @@ class ProofAnnotation:
 
 @dataclass(frozen=True, slots=True)
 class CollectedProof:
+    source: str
     nodeid: str
     command: str
     proofs: tuple[str, ...]
@@ -298,6 +299,7 @@ def load_proof_report(
         return [], set(), set(), [f"{path}: invalid proof report JSON: {exc}"]
     rows: list[CollectedProof] = []
     errors: list[str] = []
+    source = path.name
     for item in raw.get("collected_proofs", []):
         try:
             nodeid = item["nodeid"]
@@ -319,6 +321,7 @@ def load_proof_report(
             continue
         rows.append(
             CollectedProof(
+                source=source,
                 nodeid=nodeid,
                 command=command,
                 proofs=proofs,
@@ -377,6 +380,7 @@ def build_report(
     backend_support = summarize_backend_support(commands)
     annotations, annotation_errors = collect_proofs(tests_root)
     proofs_by_command: dict[str, set[str]] = {}
+    proof_sources_by_command: dict[str, set[str]] = {}
     stale_annotations: list[dict[str, str]] = []
     collected_proofs: list[CollectedProof] = []
     passed_nodeids: set[str] = set()
@@ -416,6 +420,7 @@ def build_report(
             continue
         if row.nodeid in passed_nodeids:
             proofs_by_command.setdefault(row.command, set()).update(row.proofs)
+            proof_sources_by_command.setdefault(row.command, set()).add(row.source)
 
     matrix_missing = sorted(command for command in commands if command not in entries)
     stale_rows = sorted(command for command in entries if command not in commands)
@@ -476,9 +481,42 @@ def build_report(
         "missing_required_proofs": missing_required,
         "waived_proof_gaps": waived_gaps,
         "backend_support": backend_support,
+        "proof_report_summaries": [
+            {
+                "source": source,
+                "passed_nodeids": len(
+                    {
+                        row.nodeid
+                        for row in collected_proofs
+                        if row.source == source
+                    }
+                    & passed_nodeids,
+                ),
+                "proved_commands": len(
+                    {
+                        row.command
+                        for row in collected_proofs
+                        if row.source == source and row.nodeid in passed_nodeids
+                    },
+                ),
+                "proved_proofs": len(
+                    {
+                        (row.command, proof)
+                        for row in collected_proofs
+                        if row.source == source and row.nodeid in passed_nodeids
+                        for proof in row.proofs
+                    },
+                ),
+            }
+            for source in sorted({row.source for row in collected_proofs})
+        ],
         "proofs_by_command": {
             command: sorted(values)
             for command, values in proofs_by_command.items()
+        },
+        "proof_sources_by_command": {
+            command: sorted(values)
+            for command, values in proof_sources_by_command.items()
         },
         "phase_failures": phase_failures,
         "ok": not phase_failures,
@@ -507,6 +545,15 @@ def render_text(report: dict[str, Any]) -> str:
         lines.append("Missing required proofs:")
         for command, missing in list(sorted(report["missing_required_proofs"].items()))[:20]:
             lines.append(f"  - {command}: {', '.join(missing)}")
+    if report["proof_report_summaries"]:
+        lines.append("")
+        lines.append("Proof report summaries:")
+        for item in report["proof_report_summaries"]:
+            lines.append(
+                "  - "
+                f"{item['source']}: commands={item['proved_commands']}, "
+                f"proofs={item['proved_proofs']}, passed_tests={item['passed_nodeids']}",
+            )
     if report["stale_matrix_rows"]:
         lines.extend(
             ["", "Stale matrix rows:"]
@@ -546,6 +593,14 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.extend(["## Missing Required Proofs", ""])
         for command, missing in sorted(report["missing_required_proofs"].items()):
             lines.append(f"- `{command}`: `{', '.join(missing)}`")
+        lines.append("")
+    if report["proof_report_summaries"]:
+        lines.extend(["## Proof Report Summaries", ""])
+        for item in report["proof_report_summaries"]:
+            lines.append(
+                f"- `{item['source']}`: commands=`{item['proved_commands']}`, "
+                f"proofs=`{item['proved_proofs']}`, passed_tests=`{item['passed_nodeids']}`",
+            )
         lines.append("")
     if report["stale_matrix_rows"]:
         lines.extend(["## Stale Matrix Rows", ""])
