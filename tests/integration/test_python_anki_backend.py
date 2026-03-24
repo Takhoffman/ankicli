@@ -81,6 +81,7 @@ def test_collection_stats_integration_contract(runner, fixture_collection_path) 
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("collection.validate", "fixture_integration")
 def test_collection_validate_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=["--json", "--collection", str(fixture_collection_path), "collection", "validate"],
@@ -96,6 +97,7 @@ def test_collection_validate_integration_contract(runner, fixture_collection_pat
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("collection.lock-status", "fixture_integration")
 def test_collection_lock_status_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=["--json", "--collection", str(fixture_collection_path), "collection", "lock-status"],
@@ -167,6 +169,7 @@ def test_doctor_safety_integration_contract(runner, fixture_collection_path) -> 
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("deck.list", "fixture_integration")
 def test_deck_list_integration_smoke(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=["--json", "--collection", str(fixture_collection_path), "deck", "list"],
@@ -207,6 +210,7 @@ def test_deck_get_integration_contract(runner, fixture_collection_path) -> None:
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("deck.stats", "fixture_integration")
 def test_deck_stats_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -232,6 +236,7 @@ def test_deck_stats_integration_contract(runner, fixture_collection_path) -> Non
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("deck.create", "fixture_integration")
 def test_deck_create_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -258,6 +263,7 @@ def test_deck_create_integration_contract(runner, fixture_collection_path) -> No
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("deck.rename", "fixture_integration")
 def test_deck_rename_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -287,6 +293,7 @@ def test_deck_rename_integration_contract(runner, fixture_collection_path) -> No
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("deck.delete", "fixture_integration")
 def test_deck_delete_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -313,6 +320,7 @@ def test_deck_delete_integration_contract(runner, fixture_collection_path) -> No
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("deck.reparent", "fixture_integration")
 def test_deck_reparent_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -342,6 +350,7 @@ def test_deck_reparent_integration_contract(runner, fixture_collection_path) -> 
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("model.list", "fixture_integration")
 def test_model_list_integration_smoke(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=["--json", "--collection", str(fixture_collection_path), "model", "list"],
@@ -383,6 +392,7 @@ def test_model_get_integration_contract(runner, fixture_collection_path) -> None
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("model.fields", "fixture_integration")
 def test_model_fields_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -407,6 +417,7 @@ def test_model_fields_integration_contract(runner, fixture_collection_path) -> N
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("model.templates", "fixture_integration")
 def test_model_templates_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -431,6 +442,7 @@ def test_model_templates_integration_contract(runner, fixture_collection_path) -
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("model.validate-note", "fixture_integration")
 def test_model_validate_note_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -460,6 +472,7 @@ def test_model_validate_note_integration_contract(runner, fixture_collection_pat
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("tag.list", "fixture_integration")
 def test_tag_list_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=["--json", "--collection", str(fixture_collection_path), "tag", "list"],
@@ -475,6 +488,7 @@ def test_tag_list_integration_contract(runner, fixture_collection_path) -> None:
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("tag.rename", "fixture_integration")
 def test_tag_rename_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -504,6 +518,7 @@ def test_tag_rename_integration_contract(runner, fixture_collection_path) -> Non
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("tag.delete", "fixture_integration")
 def test_tag_delete_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -530,6 +545,7 @@ def test_tag_delete_integration_contract(runner, fixture_collection_path) -> Non
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("tag.reparent", "fixture_integration")
 def test_tag_reparent_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -557,6 +573,9 @@ def test_tag_reparent_integration_contract(runner, fixture_collection_path) -> N
         assert payload["error"]["code"] in fixture_write_error_codes("TAG_NOT_FOUND")
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("search.notes", "fixture_integration")
 def test_search_notes_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -580,6 +599,9 @@ def test_search_notes_integration_contract(runner, fixture_collection_path) -> N
         assert payload["error"]["code"] in fixture_read_error_codes()
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("search.cards", "fixture_integration")
 def test_search_cards_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -661,6 +683,9 @@ def test_search_preview_integration_contract(runner, fixture_collection_path) ->
         assert payload["error"]["code"] in fixture_read_error_codes("NOTE_NOT_FOUND")
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("export.notes", "fixture_integration")
 def test_export_notes_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -713,6 +738,9 @@ def test_export_notes_ndjson_integration_contract(runner, fixture_collection_pat
             )
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("export.cards", "fixture_integration")
 def test_export_cards_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -789,6 +817,9 @@ def test_note_get_integration_contract(runner, fixture_collection_path) -> None:
         assert payload["error"]["code"] in fixture_read_error_codes("NOTE_NOT_FOUND")
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("note.fields", "fixture_integration")
 def test_note_fields_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -811,6 +842,9 @@ def test_note_fields_integration_contract(runner, fixture_collection_path) -> No
         assert payload["error"]["code"] in fixture_read_error_codes("NOTE_NOT_FOUND")
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("card.get", "fixture_integration")
 def test_card_get_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -860,6 +894,9 @@ def test_card_suspend_integration_contract(runner, fixture_collection_path) -> N
         assert payload["error"]["code"] in fixture_write_error_codes("CARD_NOT_FOUND")
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("card.unsuspend", "fixture_integration")
 def test_card_unsuspend_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -919,6 +956,9 @@ def test_note_add_integration_contract(runner, fixture_collection_path) -> None:
         )
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("import.notes", "fixture_integration")
 def test_import_notes_integration_contract(runner, fixture_collection_path, tmp_path) -> None:
     input_path = tmp_path / "notes.json"
     input_path.write_text(
@@ -962,6 +1002,9 @@ def test_import_notes_integration_contract(runner, fixture_collection_path, tmp_
         )
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("import.patch", "fixture_integration")
 def test_import_patch_integration_contract(runner, fixture_collection_path, tmp_path) -> None:
     input_path = tmp_path / "patches.json"
     input_path.write_text(
@@ -1060,6 +1103,9 @@ def test_import_patch_stdin_integration_contract(runner, fixture_collection_path
         assert payload["error"]["code"] in fixture_write_error_codes("NOTE_NOT_FOUND")
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("note.update", "fixture_integration")
 def test_note_update_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -1086,6 +1132,9 @@ def test_note_update_integration_contract(runner, fixture_collection_path) -> No
         assert payload["error"]["code"] in fixture_write_error_codes("NOTE_NOT_FOUND")
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("note.add-tags", "fixture_integration")
 def test_note_add_tags_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -1113,6 +1162,9 @@ def test_note_add_tags_integration_contract(runner, fixture_collection_path) -> 
         assert payload["error"]["code"] in fixture_write_error_codes("NOTE_NOT_FOUND")
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("note.remove-tags", "fixture_integration")
 def test_note_remove_tags_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -1140,6 +1192,9 @@ def test_note_remove_tags_integration_contract(runner, fixture_collection_path) 
         assert payload["error"]["code"] in fixture_write_error_codes("NOTE_NOT_FOUND")
 
 
+@pytest.mark.fixture_integration
+@pytest.mark.backend_python_anki
+@proves("note.move-deck", "fixture_integration")
 def test_note_move_deck_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -1197,6 +1252,7 @@ def test_note_delete_integration_contract(runner, fixture_collection_path) -> No
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("media.list", "fixture_integration")
 def test_media_list_integration_contract(runner, fixture_collection_path, tmp_path: Path) -> None:
     collection_path, media_dir = _copy_fixture_with_media(fixture_collection_path, tmp_path)
     (media_dir / "used.png").write_text("u")
@@ -1214,6 +1270,7 @@ def test_media_list_integration_contract(runner, fixture_collection_path, tmp_pa
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("media.resolve-path", "fixture_integration")
 def test_media_resolve_path_integration_contract(
     runner,
     fixture_collection_path,
@@ -1242,6 +1299,7 @@ def test_media_resolve_path_integration_contract(
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("media.check", "fixture_integration")
 def test_media_check_integration_contract(runner, fixture_collection_path, tmp_path: Path) -> None:
     collection_path, media_dir = _copy_fixture_with_media(fixture_collection_path, tmp_path)
     (media_dir / "used.png").write_text("u")
@@ -1261,6 +1319,7 @@ def test_media_check_integration_contract(runner, fixture_collection_path, tmp_p
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("media.attach", "fixture_integration")
 def test_media_attach_integration_contract(runner, fixture_collection_path, tmp_path: Path) -> None:
     collection_path, media_dir = _copy_fixture_with_media(fixture_collection_path, tmp_path)
     del media_dir
@@ -1319,6 +1378,7 @@ def test_tag_apply_integration_contract(runner, fixture_collection_path) -> None
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("tag.remove", "fixture_integration")
 def test_tag_remove_integration_contract(runner, fixture_collection_path) -> None:
     result = runner.invoke(
         args=[
@@ -1347,6 +1407,7 @@ def test_tag_remove_integration_contract(runner, fixture_collection_path) -> Non
 
 @pytest.mark.fixture_integration
 @pytest.mark.backend_python_anki
+@proves("media.orphaned", "fixture_integration")
 def test_media_orphaned_integration_contract(
     runner,
     fixture_collection_path,

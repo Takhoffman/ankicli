@@ -304,6 +304,7 @@ def test_collection_info_uses_collection_api(
 
 
 @pytest.mark.unit
+@proves("auth.status", "backend_unit")
 def test_auth_status_reports_credential_presence(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         importlib.util,
@@ -322,6 +323,16 @@ def test_auth_status_reports_credential_presence(monkeypatch: pytest.MonkeyPatch
         "supports_sync": True,
         "endpoint": "https://sync",
     }
+
+
+@pytest.mark.unit
+@proves("auth.logout", "backend_unit")
+def test_logout_reports_backend_name() -> None:
+    backend = PythonAnkiBackend()
+
+    result = backend.logout(None)
+
+    assert result == {"backend": "python-anki"}
 
 
 @pytest.mark.unit
@@ -422,6 +433,68 @@ def test_sync_run_raises_conflict_on_full_sync_requirement(
 
     with pytest.raises(SyncConflictError):
         backend.sync_run(collection_path, credential=SyncCredential(hkey="abc"))
+
+
+@pytest.mark.unit
+@proves("backup.create", "backend_unit")
+def test_create_backup_uses_collection_api(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    collection_path.write_text("fixture")
+    backup_dir = tmp_path / "backups"
+    backend = PythonAnkiBackend()
+    fake_collection = _FakeCollection(str(collection_path))
+    calls: list[tuple[str, bool, bool]] = []
+
+    def create_backup(*, backup_folder: str, force: bool, wait_for_completion: bool) -> bool:
+        calls.append((backup_folder, force, wait_for_completion))
+        return True
+
+    fake_collection.create_backup = create_backup  # type: ignore[attr-defined]
+    fake_collection.await_backup_completion = lambda: calls.append(("await", False, False))  # type: ignore[attr-defined]
+    monkeypatch.setattr(backend, "_load_collection_type", lambda: lambda path: fake_collection)
+
+    result = backend.create_backup(collection_path, backup_folder=backup_dir, force=True)
+
+    assert result == {"created": True}
+    assert calls[0] == (str(backup_dir), True, True)
+    assert calls[1] == ("await", False, False)
+
+
+@pytest.mark.unit
+@proves("backup.restore", "backend_unit")
+def test_restore_backup_uses_import_collection_package(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    collection_path.write_text("fixture")
+    backup_path = tmp_path / "backup.colpkg"
+    backup_path.write_text("backup")
+    media_dir = tmp_path / "collection.media"
+    media_dir.mkdir()
+    media_db = tmp_path / "media.db2"
+    backend = PythonAnkiBackend()
+    fake_collection = _FakeCollection(str(collection_path))
+    backend_calls: list[dict[str, str]] = []
+    fake_collection.close_for_full_sync = lambda: None  # type: ignore[attr-defined]
+    fake_collection._backend = SimpleNamespace(  # type: ignore[attr-defined]
+        import_collection_package=lambda **kwargs: backend_calls.append(kwargs),
+    )
+    monkeypatch.setattr(backend, "_load_collection_type", lambda: lambda path: fake_collection)
+
+    result = backend.restore_backup(
+        collection_path,
+        backup_path=backup_path,
+        media_folder=media_dir,
+        media_db_path=media_db,
+    )
+
+    assert result["restored"] is True
+    assert backend_calls[0]["col_path"] == str(collection_path)
+    assert backend_calls[0]["backup_path"] == str(backup_path.resolve())
 
 
 @pytest.mark.unit

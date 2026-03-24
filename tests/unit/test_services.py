@@ -60,6 +60,7 @@ def test_python_anki_backend_reports_capabilities() -> None:
 
 
 @pytest.mark.unit
+@proves("doctor.backend", "failure")
 def test_doctor_backend_report_summarizes_operation_counts(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = PythonAnkiBackend()
     monkeypatch.setattr(
@@ -88,6 +89,7 @@ def test_doctor_backend_report_summarizes_operation_counts(monkeypatch: pytest.M
 
 
 @pytest.mark.unit
+@proves("doctor.capabilities", "failure")
 def test_doctor_capabilities_report_adds_operation_counts(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = PythonAnkiBackend()
     monkeypatch.setattr(
@@ -111,6 +113,7 @@ def test_doctor_capabilities_report_adds_operation_counts(monkeypatch: pytest.Mo
 
 
 @pytest.mark.unit
+@proves("backend.test-connection", "failure")
 def test_backend_test_connection_uses_backend_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = PythonAnkiBackend()
     monkeypatch.setattr(
@@ -179,6 +182,7 @@ class _FakeCredentialStore:
 
 
 @pytest.mark.unit
+@proves("auth.status", "unit")
 def test_auth_status_reports_stored_credential(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = PythonAnkiBackend()
     store = _FakeCredentialStore(SyncCredential(hkey="abc", endpoint="https://sync"))
@@ -197,6 +201,7 @@ def test_auth_status_reports_stored_credential(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.unit
+@proves("auth.login", "unit", "safety")
 def test_auth_login_persists_sync_credential(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = PythonAnkiBackend()
     store = _FakeCredentialStore()
@@ -227,6 +232,7 @@ def test_auth_login_persists_sync_credential(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.unit
+@proves("auth.logout", "unit", "safety")
 def test_auth_logout_deletes_stored_credential(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = PythonAnkiBackend()
     store = _FakeCredentialStore(SyncCredential(hkey="abc"))
@@ -326,7 +332,7 @@ def test_backup_list_normalizes_backups(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-@proves("backup.create", "unit")
+@proves("backup.create", "unit", "safety")
 def test_backup_create_detects_new_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     root = tmp_path / "Anki2"
     profile_dir = root / "User 1"
@@ -352,7 +358,7 @@ def test_backup_create_detects_new_file(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
 
 @pytest.mark.unit
-@proves("backup.create", "unit")
+@proves("backup.create", "unit", "safety")
 def test_backup_create_detects_overwritten_existing_file(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -652,6 +658,7 @@ def test_media_attach_requires_confirmation_or_dry_run() -> None:
 
 
 @pytest.mark.unit
+@proves("tag.apply", "safety")
 def test_tag_apply_requires_confirmation_or_dry_run() -> None:
     with pytest.raises(UnsafeOperationError):
         TagService(PythonAnkiBackend()).apply(

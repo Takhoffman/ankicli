@@ -71,6 +71,8 @@ def test_backend_capabilities_reports_available_when_version_responds(
 
 
 @pytest.mark.unit
+@proves("backend.capabilities", "failure")
+@proves("backend.info", "failure")
 def test_backend_capabilities_reports_unavailable_on_connection_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

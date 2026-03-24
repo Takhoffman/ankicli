@@ -107,6 +107,7 @@ def test_real_python_anki_runtime_exposes_backup_methods() -> None:
 @proves("backup.list", "real_python_anki")
 @proves("backup.create", "real_python_anki")
 @proves("backup.get", "real_python_anki")
+@proves("profile.get", "real_python_anki")
 @proves("profile.list", "real_python_anki")
 @proves("profile.default", "real_python_anki")
 @proves("profile.resolve", "real_python_anki")
@@ -118,13 +119,38 @@ def test_profile_commands_with_disposable_root(
 
     list_payload = _payload(runner.invoke(args=["--json", "profile", "list"]))
     default_payload = _payload(runner.invoke(args=["--json", "profile", "default"]))
+    get_payload = _payload(
+        runner.invoke(args=["--json", "profile", "get", "--name", profile]),
+    )
     resolve_payload = _payload(
         runner.invoke(args=["--json", "profile", "resolve", "--name", profile]),
     )
 
     assert any(item["name"] == profile for item in list_payload["data"]["items"])
     assert default_payload["data"]["name"] == profile
+    assert get_payload["data"]["name"] == profile
     assert resolve_payload["data"]["collection_path"].endswith("User 1/collection.anki2")
+
+
+@pytest.mark.backend_python_anki_backup_real
+@proves("sync.status", "real_python_anki")
+@proves("sync.run", "real_python_anki", "safety")
+@proves("sync.pull", "real_python_anki", "safety")
+@proves("sync.push", "real_python_anki", "safety")
+def test_sync_commands_require_credentials_real(
+    runner,
+    disposable_profile_root: dict[str, str | int],
+) -> None:
+    profile = str(disposable_profile_root["profile"])
+
+    status_result = runner.invoke(args=["--json", "--profile", profile, "sync", "status"])
+    run_result = runner.invoke(args=["--json", "--profile", profile, "sync", "run"])
+    pull_result = runner.invoke(args=["--json", "--profile", profile, "sync", "pull"])
+    push_result = runner.invoke(args=["--json", "--profile", profile, "sync", "push"])
+
+    for result in (status_result, run_result, pull_result, push_result):
+        payload = _payload(result)
+        assert payload["error"]["code"] == "AUTH_REQUIRED"
 
 
 @pytest.mark.backend_python_anki_backup_real

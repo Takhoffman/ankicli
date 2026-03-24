@@ -8,7 +8,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from ankicli.app.services import CatalogService, ExportService, ImportService, NoteService
+from ankicli.app.services import (
+    CatalogService,
+    CollectionService,
+    ExportService,
+    ImportService,
+    NoteService,
+    SearchService,
+    TagService,
+)
 from ankicli.backends.ankiconnect import AnkiConnectBackend
 from ankicli.backends.python_anki import PythonAnkiBackend
 from tests.proof import proves
@@ -277,6 +285,7 @@ def test_note_get_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
 
 @pytest.mark.unit
+@proves("card.get", "parity")
 def test_card_get_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     collection_path = tmp_path / "collection.anki2"
     python_backend = _install_python_backend(monkeypatch, collection_path)
@@ -290,6 +299,7 @@ def test_card_get_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
 
 @pytest.mark.unit
+@proves("note.add", "parity", "safety")
 def test_note_add_dry_run_shared_shape_parity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -320,6 +330,7 @@ def test_note_add_dry_run_shared_shape_parity(
 
 
 @pytest.mark.unit
+@proves("model.get", "parity")
 def test_model_get_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     collection_path = tmp_path / "collection.anki2"
     python_backend = _install_python_backend(monkeypatch, collection_path)
@@ -333,6 +344,7 @@ def test_model_get_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path
 
 
 @pytest.mark.unit
+@proves("model.fields", "parity")
 def test_model_fields_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     collection_path = tmp_path / "collection.anki2"
     python_backend = _install_python_backend(monkeypatch, collection_path)
@@ -346,6 +358,7 @@ def test_model_fields_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 @pytest.mark.unit
+@proves("model.templates", "parity")
 def test_model_templates_shared_shape_parity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -362,6 +375,7 @@ def test_model_templates_shared_shape_parity(
 
 
 @pytest.mark.unit
+@proves("deck.stats", "parity")
 def test_deck_stats_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     collection_path = tmp_path / "collection.anki2"
     python_backend = _install_python_backend(monkeypatch, collection_path)
@@ -375,6 +389,7 @@ def test_deck_stats_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
 
 @pytest.mark.unit
+@proves("search.notes", "parity")
 def test_search_notes_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     collection_path = tmp_path / "collection.anki2"
     python_backend = _install_python_backend(monkeypatch, collection_path)
@@ -388,6 +403,7 @@ def test_search_notes_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 @pytest.mark.unit
+@proves("search.cards", "parity")
 def test_search_cards_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     collection_path = tmp_path / "collection.anki2"
     python_backend = _install_python_backend(monkeypatch, collection_path)
@@ -401,6 +417,7 @@ def test_search_cards_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 @pytest.mark.unit
+@proves("note.update", "parity", "safety")
 def test_note_update_dry_run_shared_shape_parity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -427,6 +444,7 @@ def test_note_update_dry_run_shared_shape_parity(
 
 
 @pytest.mark.unit
+@proves("note.add-tags", "parity")
 def test_note_add_tags_dry_run_shared_shape_parity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -453,6 +471,7 @@ def test_note_add_tags_dry_run_shared_shape_parity(
 
 
 @pytest.mark.unit
+@proves("note.remove-tags", "parity")
 def test_note_remove_tags_dry_run_shared_shape_parity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -479,6 +498,7 @@ def test_note_remove_tags_dry_run_shared_shape_parity(
 
 
 @pytest.mark.unit
+@proves("note.fields", "parity")
 def test_note_fields_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     collection_path = tmp_path / "collection.anki2"
     python_backend = _install_python_backend(monkeypatch, collection_path)
@@ -492,6 +512,7 @@ def test_note_fields_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 
 @pytest.mark.unit
+@proves("note.move-deck", "parity")
 def test_note_move_deck_dry_run_shared_shape_parity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -544,6 +565,7 @@ def test_export_notes_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 @pytest.mark.unit
+@proves("export.cards", "parity")
 def test_export_cards_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     collection_path = tmp_path / "collection.anki2"
     python_backend = _install_python_backend(monkeypatch, collection_path)
@@ -567,6 +589,7 @@ def test_export_cards_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 @pytest.mark.unit
+@proves("import.notes", "parity")
 def test_import_notes_stdin_dry_run_shared_shape_parity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -649,6 +672,7 @@ def test_import_patch_stdin_dry_run_shared_shape_parity(
 
 
 @pytest.mark.unit
+@proves("card.suspend", "parity")
 def test_card_suspend_dry_run_shared_shape_parity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -670,3 +694,237 @@ def test_card_suspend_dry_run_shared_shape_parity(
 
     assert set(python_result) == {"id", "suspended", "dry_run"}
     assert set(ankiconnect_result) == {"id", "suspended", "dry_run"}
+
+
+@pytest.mark.unit
+@proves("card.unsuspend", "parity")
+def test_card_unsuspend_dry_run_shared_shape_parity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    python_backend = _install_python_backend(monkeypatch, collection_path)
+    ankiconnect_backend = _install_ankiconnect_backend(monkeypatch)
+
+    python_result = python_backend.unsuspend_cards(
+        collection_path,
+        card_ids=[201],
+        dry_run=True,
+    )[0]
+    ankiconnect_result = ankiconnect_backend.unsuspend_cards(
+        Path("."),
+        card_ids=[201],
+        dry_run=True,
+    )[0]
+
+    assert set(python_result) == {"id", "suspended", "dry_run"}
+    assert set(ankiconnect_result) == {"id", "suspended", "dry_run"}
+
+
+@pytest.mark.unit
+@proves("collection.stats", "parity")
+def test_collection_stats_shared_shape_parity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    python_backend = _install_python_backend(monkeypatch, collection_path)
+    ankiconnect_backend = _install_ankiconnect_backend(monkeypatch)
+
+    python_result = CollectionService(python_backend).stats(str(collection_path))
+    ankiconnect_result = CollectionService(ankiconnect_backend).stats(None)
+
+    expected_keys = {
+        "collection_name",
+        "note_count",
+        "card_count",
+        "deck_count",
+        "model_count",
+    }
+    assert set(python_result) == expected_keys
+    assert set(ankiconnect_result) == expected_keys
+
+
+@pytest.mark.unit
+@proves("deck.list", "parity")
+def test_deck_list_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    python_backend = _install_python_backend(monkeypatch, collection_path)
+    ankiconnect_backend = _install_ankiconnect_backend(monkeypatch)
+
+    python_result = CatalogService(python_backend).list_decks(str(collection_path))
+    ankiconnect_result = CatalogService(ankiconnect_backend).list_decks(None)
+
+    assert set(python_result) == {"items"}
+    assert set(ankiconnect_result) == {"items"}
+    assert set(python_result["items"][0]) == {"id", "name"}
+    assert set(ankiconnect_result["items"][0]) == {"id", "name"}
+
+
+@pytest.mark.unit
+@proves("deck.get", "parity")
+def test_deck_get_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    python_backend = _install_python_backend(monkeypatch, collection_path)
+    ankiconnect_backend = _install_ankiconnect_backend(monkeypatch)
+
+    python_result = CatalogService(python_backend).get_deck(str(collection_path), name="Default")
+    ankiconnect_result = CatalogService(ankiconnect_backend).get_deck(None, name="Default")
+
+    assert set(python_result) == {"id", "name"}
+    assert set(ankiconnect_result) == {"id", "name"}
+
+
+@pytest.mark.unit
+@proves("model.list", "parity")
+def test_model_list_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    python_backend = _install_python_backend(monkeypatch, collection_path)
+    ankiconnect_backend = _install_ankiconnect_backend(monkeypatch)
+
+    python_result = CatalogService(python_backend).list_models(str(collection_path))
+    ankiconnect_result = CatalogService(ankiconnect_backend).list_models(None)
+
+    assert set(python_result) == {"items"}
+    assert set(ankiconnect_result) == {"items"}
+    assert set(python_result["items"][0]) == {"id", "name"}
+    assert set(ankiconnect_result["items"][0]) == {"id", "name"}
+
+
+@pytest.mark.unit
+@proves("model.validate-note", "parity")
+def test_model_validate_note_shared_shape_parity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    python_backend = _install_python_backend(monkeypatch, collection_path)
+    ankiconnect_backend = _install_ankiconnect_backend(monkeypatch)
+
+    python_result = CatalogService(python_backend).validate_note(
+        str(collection_path),
+        model_name="Basic",
+        field_assignments=["Front=hello", "Back=world"],
+    )
+    ankiconnect_result = CatalogService(ankiconnect_backend).validate_note(
+        None,
+        model_name="Basic",
+        field_assignments=["Front=hello", "Back=world"],
+    )
+
+    required_keys = {
+        "model",
+        "ok",
+        "fields",
+        "missing_fields",
+        "unknown_fields",
+        "checks",
+        "errors",
+    }
+    assert required_keys <= set(python_result)
+    assert required_keys <= set(ankiconnect_result)
+
+
+@pytest.mark.unit
+@proves("search.count", "parity")
+def test_search_count_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    python_backend = _install_python_backend(monkeypatch, collection_path)
+    ankiconnect_backend = _install_ankiconnect_backend(monkeypatch)
+
+    python_result = SearchService(python_backend).count(
+        str(collection_path),
+        kind="notes",
+        query="",
+    )
+    ankiconnect_result = SearchService(ankiconnect_backend).count(None, kind="notes", query="")
+
+    assert set(python_result) == {"kind", "query", "total"}
+    assert set(ankiconnect_result) == {"kind", "query", "total"}
+
+
+@pytest.mark.unit
+@proves("search.preview", "parity")
+def test_search_preview_shared_shape_parity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    python_backend = _install_python_backend(monkeypatch, collection_path)
+    ankiconnect_backend = _install_ankiconnect_backend(monkeypatch)
+
+    python_result = SearchService(python_backend).preview(
+        str(collection_path),
+        kind="notes",
+        query="",
+        limit=5,
+        offset=0,
+    )
+    ankiconnect_result = SearchService(ankiconnect_backend).preview(
+        None,
+        kind="notes",
+        query="",
+        limit=5,
+        offset=0,
+    )
+
+    assert set(python_result) == {"kind", "query", "limit", "offset", "items", "total"}
+    assert set(ankiconnect_result) == {"kind", "query", "limit", "offset", "items", "total"}
+
+
+@pytest.mark.unit
+@proves("tag.apply", "parity")
+def test_tag_apply_dry_run_shared_shape_parity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    python_backend = _install_python_backend(monkeypatch, collection_path)
+    ankiconnect_backend = _install_ankiconnect_backend(monkeypatch)
+
+    python_result = TagService(python_backend).apply(
+        str(collection_path),
+        note_id=101,
+        tags=["tag2"],
+        dry_run=True,
+        yes=False,
+    )
+    ankiconnect_result = TagService(ankiconnect_backend).apply(
+        None,
+        note_id=101,
+        tags=["tag2"],
+        dry_run=True,
+        yes=False,
+    )
+
+    assert set(python_result) >= {"id", "tags", "action", "dry_run"}
+    assert set(ankiconnect_result) >= {"id", "tags", "action", "dry_run"}
+
+
+@pytest.mark.unit
+@proves("tag.remove", "parity")
+def test_tag_remove_dry_run_shared_shape_parity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    python_backend = _install_python_backend(monkeypatch, collection_path)
+    ankiconnect_backend = _install_ankiconnect_backend(monkeypatch)
+
+    python_result = TagService(python_backend).remove(
+        str(collection_path),
+        note_id=101,
+        tags=["tag1"],
+        dry_run=True,
+        yes=False,
+    )
+    ankiconnect_result = TagService(ankiconnect_backend).remove(
+        None,
+        note_id=101,
+        tags=["tag1"],
+        dry_run=True,
+        yes=False,
+    )
+
+    assert set(python_result) >= {"id", "tags", "action", "dry_run"}
+    assert set(ankiconnect_result) >= {"id", "tags", "action", "dry_run"}

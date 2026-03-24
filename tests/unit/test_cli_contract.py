@@ -500,6 +500,18 @@ def test_tag_apply_without_path_is_structured_error(runner) -> None:
 
 
 @pytest.mark.unit
+@proves("tag.remove", "cli_contract", "failure")
+def test_tag_remove_without_path_is_structured_error(runner) -> None:
+    result = runner.invoke(
+        args=["--json", "tag", "remove", "--id", "101", "--tag", "review", "--dry-run"],
+    )
+
+    assert result.exit_code == 4
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "COLLECTION_REQUIRED"
+
+
+@pytest.mark.unit
 @proves("tag.remove", "unit", "cli_contract", "safety")
 def test_tag_remove_requires_confirmation_or_dry_run(runner, tmp_path) -> None:
     collection_path = tmp_path / "collection.anki2"
