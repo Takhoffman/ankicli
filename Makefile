@@ -1,4 +1,4 @@
-.PHONY: lint build test-fast test-unit test-smoke test-fixture-integration test-e2e test-distribution test-all test-backup-real test-matrix real-backend-setup ankiconnect-backend-setup
+.PHONY: lint build test-fast test-unit test-smoke test-fixture-integration test-e2e test-distribution test-all test-backup-real test-matrix test-matrix-phase3 real-backend-setup ankiconnect-backend-setup
 
 PROOF_REPORT ?= /tmp/ankicli-proof-report.json
 MATRIX_AUDIT_ARGS ?= --proof-report $(PROOF_REPORT)
@@ -37,6 +37,9 @@ test-backup-real:
 test-matrix:
 	PYTEST_PLUGINS=ankicli.pytest_plugin UV_CACHE_DIR=.uv-cache uv run pytest -c pyproject.toml -m "unit or smoke" --proof-report $(PROOF_REPORT)
 	UV_CACHE_DIR=.uv-cache uv run python scripts/audit_quality_matrix.py $(MATRIX_AUDIT_ARGS)
+
+test-matrix-phase3:
+	UV_CACHE_DIR=.uv-cache uv run python scripts/run_matrix_phase3.py
 
 real-backend-setup:
 	UV_CACHE_DIR=.uv-cache uv run python scripts/prepare_real_backend.py

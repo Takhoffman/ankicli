@@ -136,6 +136,7 @@ Proof audit:
 
 ```bash
 make test-matrix
+make test-matrix-phase3
 ```
 
 The unified quality matrix is the primary proof audit:
@@ -145,6 +146,8 @@ The unified quality matrix is the primary proof audit:
 - `--proof-report` is repeatable, so higher-phase audits can aggregate multiple pytest runs
 - the default matrix phase is `phase2`
 - `phase3` should only be used when the required real-backend proof tiers are actually executed
+- `make test-matrix-phase3` is the explicit higher-assurance path: it runs fast-path, fixture integration, and the disposable real `python-anki` backup tier, then audits them together under `phase3`
+- `make test-matrix-phase3` requires `ANKI_SOURCE_PATH`
 
 Build:
 

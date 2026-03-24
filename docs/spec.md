@@ -55,6 +55,11 @@ service layer, JSON-first responses, and a backend seam present from day one.
   - fail on stale matrix rows, stale proof annotations, or non-collected proof annotations
   - fail when required `unit` or `cli_contract` proof is not satisfied by passed pytest items
 - `phase3` is reserved for environments that actually execute the required real-backend proof tiers
+- `scripts/run_matrix_phase3.py` is the explicit higher-assurance runner:
+  - run fast-path proof
+  - run fixture-integration proof
+  - run disposable real `python-anki` backup/profile proof
+  - audit all resulting proof reports together under `phase3`
 
 ## Development Policy
 
