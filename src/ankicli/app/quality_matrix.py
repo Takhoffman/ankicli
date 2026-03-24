@@ -345,11 +345,27 @@ def load_proof_report(
     return rows, passed_nodeids, collected_tests, errors
 
 
+def load_proof_reports(
+    paths: list[Path],
+) -> tuple[list[CollectedProof], set[str], set[tuple[str, str]], list[str]]:
+    all_rows: list[CollectedProof] = []
+    all_passed_nodeids: set[str] = set()
+    all_collected_tests: set[tuple[str, str]] = set()
+    all_errors: list[str] = []
+    for path in paths:
+        rows, passed_nodeids, collected_tests, errors = load_proof_report(path)
+        all_rows.extend(rows)
+        all_passed_nodeids.update(passed_nodeids)
+        all_collected_tests.update(collected_tests)
+        all_errors.extend(errors)
+    return all_rows, all_passed_nodeids, all_collected_tests, all_errors
+
+
 def build_report(
     *,
     matrix_path: Path,
     tests_root: Path,
-    proof_report_path: Path | None = None,
+    proof_report_paths: list[Path] | None = None,
     phase_override: str | None = None,
 ) -> dict[str, Any]:
     phase, entries = load_matrix(matrix_path)
@@ -365,9 +381,9 @@ def build_report(
     collected_proofs: list[CollectedProof] = []
     passed_nodeids: set[str] = set()
     collected_tests: set[tuple[str, str]] = set()
-    if proof_report_path is not None:
-        collected_proofs, passed_nodeids, collected_tests, report_errors = load_proof_report(
-            proof_report_path,
+    if proof_report_paths:
+        collected_proofs, passed_nodeids, collected_tests, report_errors = load_proof_reports(
+            proof_report_paths,
         )
         annotation_errors.extend(report_errors)
 
@@ -381,7 +397,7 @@ def build_report(
                 },
             )
             continue
-        if proof_report_path is not None:
+        if proof_report_paths:
             test_key = (str(Path(annotation.file).resolve()), annotation.test_name)
             if test_key not in collected_tests:
                 annotation_errors.append(
@@ -433,8 +449,10 @@ def build_report(
             for item in stale_annotations
         )
     if phase in {"phase2", "phase3"}:
-        if proof_report_path is None:
-            phase_failures.append("proof report path is required for phase2/phase3 enforcement")
+        if not proof_report_paths:
+            phase_failures.append(
+                "at least one proof report path is required for phase2/phase3 enforcement",
+            )
         phase_failures.extend(f"missing matrix row: {command}" for command in matrix_missing)
         for command, missing in sorted(missing_required.items()):
             core_missing = [item for item in missing if item in {"unit", "cli_contract"}]

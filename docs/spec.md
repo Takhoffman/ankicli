@@ -47,6 +47,7 @@ service layer, JSON-first responses, and a backend seam present from day one.
 - `scripts/audit_quality_matrix.py` is the primary unified auditor
 - test proof is attached explicitly with `@proves("command.id", "proof_type", ...)`
 - proof satisfaction comes from pytest-collected and pytest-passed tests via the proof report, not from source annotations alone
+- the auditor can merge multiple proof reports from separate pytest runs
 - backend capability reporting remains a sibling signal, not a required proof type
 - raw line/branch coverage remains supplemental and is not the primary adequacy gate
 - default enforcement is `phase2`:

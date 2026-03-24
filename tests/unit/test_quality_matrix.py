@@ -254,7 +254,7 @@ def test_build_report_honors_phase2_core_proof_failure(
     report = build_report(
         matrix_path=matrix_path,
         tests_root=tests_root,
-        proof_report_path=proof_report,
+        proof_report_paths=[proof_report],
         phase_override="phase2",
     )
 
@@ -333,7 +333,7 @@ def test_build_report_honors_waived_proofs_in_phase3(
     report = build_report(
         matrix_path=matrix_path,
         tests_root=tests_root,
-        proof_report_path=proof_report,
+        proof_report_paths=[proof_report],
         phase_override="phase3",
     )
 
@@ -406,7 +406,7 @@ def test_build_report_does_not_count_unrun_collected_proofs(
     report = build_report(
         matrix_path=matrix_path,
         tests_root=tests_root,
-        proof_report_path=proof_report,
+        proof_report_paths=[proof_report],
     )
 
     assert report["ok"] is False
@@ -465,7 +465,7 @@ def test_build_report_flags_non_collected_proof_annotations(
     report = build_report(
         matrix_path=matrix_path,
         tests_root=tests_root,
-        proof_report_path=proof_report,
+        proof_report_paths=[proof_report],
     )
 
     assert report["ok"] is False
@@ -533,10 +533,113 @@ def test_build_report_allows_collected_but_unrun_annotations(
     report = build_report(
         matrix_path=matrix_path,
         tests_root=tests_root,
-        proof_report_path=proof_report,
+        proof_report_paths=[proof_report],
     )
 
     assert report["annotation_errors"] == []
+
+
+def test_build_report_merges_multiple_proof_reports(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("ankicli.app.quality_matrix.implemented_commands", lambda: ["doctor.env"])
+    monkeypatch.setattr(
+        "ankicli.app.quality_matrix.summarize_backend_support",
+        lambda commands: {
+            "python-anki": {command: True for command in commands},
+            "ankiconnect": {},
+        },
+    )
+    tests_root = tmp_path / "tests"
+    tests_root.mkdir()
+    path = tests_root / "test_example.py"
+    path.write_text(
+        textwrap.dedent(
+            """
+            from tests.proof import proves
+
+            @proves("doctor.env", "unit")
+            def test_unit():
+                assert True
+
+            @proves("doctor.env", "cli_contract")
+            def test_contract():
+                assert True
+            """,
+        ).strip()
+        + "\n",
+    )
+    proof_report_one = _write_proof_report(
+        tmp_path,
+        f"""
+        {{
+          "collected_proofs": [
+            {{
+              "nodeid": "tests/test_example.py::test_unit",
+              "file": "{path.resolve()}",
+              "test_name": "test_unit",
+              "command": "doctor.env",
+              "proofs": ["unit"]
+            }}
+          ],
+          "collected_tests": [
+            {{
+              "file": "{path.resolve()}",
+              "test_name": "test_unit"
+            }}
+          ],
+          "passed_nodeids": ["tests/test_example.py::test_unit"]
+        }}
+        """,
+    )
+    proof_report_two = tmp_path / "proof-report-two.json"
+    proof_report_two.write_text(
+        textwrap.dedent(
+            f"""
+            {{
+              "collected_proofs": [
+                {{
+                  "nodeid": "tests/test_example.py::test_contract",
+                  "file": "{path.resolve()}",
+                  "test_name": "test_contract",
+                  "command": "doctor.env",
+                  "proofs": ["cli_contract"]
+                }}
+              ],
+              "collected_tests": [
+                {{
+                  "file": "{path.resolve()}",
+                  "test_name": "test_contract"
+                }}
+              ],
+              "passed_nodeids": ["tests/test_example.py::test_contract"]
+            }}
+            """,
+        ).strip()
+        + "\n",
+    )
+    matrix_path = _write_matrix(
+        tmp_path,
+        """
+        phase: phase2
+        commands:
+          - command: doctor.env
+            backend_scope: both
+            risk: read
+            required_proofs: [unit, cli_contract]
+            not_applicable_proofs: []
+        """,
+    )
+
+    report = build_report(
+        matrix_path=matrix_path,
+        tests_root=tests_root,
+        proof_report_paths=[proof_report_one, proof_report_two],
+    )
+
+    assert report["ok"] is True
+    assert report["proofs_by_command"]["doctor.env"] == ["cli_contract", "unit"]
 
 
 def test_build_report_handles_missing_proof_report_as_audit_failure(
@@ -584,7 +687,7 @@ def test_build_report_handles_missing_proof_report_as_audit_failure(
     report = build_report(
         matrix_path=matrix_path,
         tests_root=tests_root,
-        proof_report_path=tmp_path / "missing.json",
+        proof_report_paths=[tmp_path / "missing.json"],
     )
 
     assert report["ok"] is False
