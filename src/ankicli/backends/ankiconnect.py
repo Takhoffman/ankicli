@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from ankicli.app.credentials import SyncCredential
 from ankicli.app.errors import (
     BackendOperationUnsupportedError,
     BackendUnavailableError,
@@ -100,6 +101,87 @@ class AnkiConnectBackend(BaseBackend):
             supported_operations=self.supported_operations(),
             notes=notes,
         )
+
+    def auth_status(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        del collection_path, credential
+        self._raise_unsupported("auth.status")
+
+    def login(
+        self,
+        collection_path: Path | None,
+        *,
+        username: str,
+        password: str,
+        endpoint: str | None,
+    ) -> SyncCredential:
+        del collection_path, username, password, endpoint
+        self._raise_unsupported("auth.login")
+
+    def logout(self, collection_path: Path | None) -> dict:
+        del collection_path
+        self._raise_unsupported("auth.logout")
+
+    def sync_status(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        del collection_path, credential
+        self._raise_unsupported("sync.status")
+
+    def sync_run(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        del collection_path, credential
+        self._raise_unsupported("sync.run")
+
+    def sync_pull(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        del collection_path, credential
+        self._raise_unsupported("sync.pull")
+
+    def sync_push(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        del collection_path, credential
+        self._raise_unsupported("sync.push")
+
+    def create_backup(
+        self,
+        collection_path: Path,
+        *,
+        backup_folder: Path,
+        force: bool,
+    ) -> dict:
+        del collection_path, backup_folder, force
+        self._raise_unsupported("backup.create")
+
+    def restore_backup(
+        self,
+        collection_path: Path,
+        *,
+        backup_path: Path,
+        media_folder: Path,
+        media_db_path: Path,
+    ) -> dict:
+        del collection_path, backup_path, media_folder, media_db_path
+        self._raise_unsupported("backup.restore")
 
     def _invoke(self, action: str, params: dict[str, Any] | None = None) -> Any:
         payload = json.dumps(

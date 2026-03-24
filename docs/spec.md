@@ -10,7 +10,9 @@ service layer, JSON-first responses, and a backend seam present from day one.
 - Open a collection
 - Inspect decks, models, notes, and cards
 - Inspect tags
- - Inspect media files and basic media health
+- Inspect media files and basic media health
+- Resolve local Anki profiles into collection/media/backup paths
+- Create and inspect local backups
 - Search notes and cards
 - Add, update, and delete notes
 - Add and remove note tags
@@ -32,6 +34,9 @@ service layer, JSON-first responses, and a backend seam present from day one.
 - Distribution tests through built artifacts installed into an isolated environment
 - Real Python-Anki integration is an opt-in local tier for validating the implemented command slices
   against a true collection
+- Disposable Python-Anki backup integration is a separate opt-in local tier that creates a throwaway
+  Anki2 profile root under `/tmp` and validates backup/profile flows without touching a personal
+  profile
 - Live AnkiConnect integration is a separate opt-in local tier for validating the live-desktop
   backend against a running AnkiConnect server
 
@@ -58,6 +63,8 @@ service layer, JSON-first responses, and a backend seam present from day one.
 - Runtime resolution order under that path: `pylib/`, then `python/`, then repo root
 - Default repo workflow does not require Anki source
 - `backend_python_anki_real` is the only test tier that depends on this setup today
+- `backend_python_anki_backup_real` also depends on this setup, but creates its own disposable
+  profile root via `ANKICLI_ANKI2_ROOT` during the test run
 - Distinguish two local modes:
   - import-path setup check via raw source checkout
   - true collection validation via wheel-backed or built-artifact-backed `anki`
@@ -76,9 +83,15 @@ service layer, JSON-first responses, and a backend seam present from day one.
 
 - Collection and backend:
   - `--version`
+  - `--collection /path/to/collection.anki2`
+  - `--profile <name>`
   - `doctor env|backend|capabilities|collection|safety`
   - `backend list|info|capabilities|test-connection`
+  - `auth status|login|logout`
+  - `profile list|get|default|resolve`
+  - `backup status|list|create|get|restore`
   - `collection info|stats|validate|lock-status`
+  - `sync status|run|pull|push`
   - `deck list|get|stats|create|rename|delete|reparent`
   - `model list|get|fields|templates|validate-note`
 - Search:
@@ -123,6 +136,8 @@ service layer, JSON-first responses, and a backend seam present from day one.
 - `python-anki`
   - supports the full currently implemented surface
   - remains the primary local/offline backend
+  - owns standalone sync auth and stored credentials
+  - owns local profile discovery, backup creation, and backup restore
 - `ankiconnect`
   - supports:
     - `doctor backend|capabilities`
@@ -139,6 +154,10 @@ service layer, JSON-first responses, and a backend seam present from day one.
     - `note get|fields|add|update|move-deck|add-tags|remove-tags`
     - `card get|suspend|unsuspend`
   - does not support yet:
+    - `auth status|login|logout`
+    - `profile list|get|default|resolve`
+    - `backup status|list|create|get|restore`
+    - `sync status|run|pull|push`
     - `doctor collection|safety`
     - `collection validate|lock-status`
     - `note delete`
@@ -156,6 +175,15 @@ service layer, JSON-first responses, and a backend seam present from day one.
 ## Current Safety Rules
 
 - Machine-readable mode is `--json` and should be treated as the default automation surface.
+- `--collection` and `--profile` are mutually exclusive.
+- `--profile` resolves local macOS Anki data rooted at
+  `~/Library/Application Support/Anki2` by default.
+- `auth login` stores sync credentials in the OS keychain when supported.
+- `sync status` is the safe preflight command before any real sync operation.
+- Sync is not backup. Backup and restore are local rollback flows, not remote replication.
+- `backup restore` is CLI-only, requires `--yes`, and creates a fresh safety backup first.
+- Risky real `python-anki` writes create an automatic pre-mutation backup unless
+  `--no-auto-backup` is passed.
 - `tag apply`, `tag remove`, `tag rename`, `tag delete`, `tag reparent`, `media attach`,
   `import notes`, `import patch`, `note delete`, `note add-tags`, `note remove-tags`,
   `card suspend`, and `card unsuspend` require `--yes` for real mutation.
@@ -176,3 +204,23 @@ Failure:
 ```json
 {"ok": false, "backend": "python-anki", "error": {"code": "EXAMPLE", "message": "..." }}
 ```
+
+Sync/auth-specific stable error codes:
+
+- `AUTH_REQUIRED`
+- `AUTH_INVALID`
+- `AUTH_STORAGE_UNAVAILABLE`
+- `SYNC_UNAVAILABLE`
+- `SYNC_CONFLICT`
+- `SYNC_IN_PROGRESS`
+- `SYNC_FAILED`
+
+Backup/profile-specific stable error codes:
+
+- `BACKUP_UNAVAILABLE`
+- `BACKUP_NOT_FOUND`
+- `BACKUP_CREATE_FAILED`
+- `BACKUP_RESTORE_FAILED`
+- `BACKUP_RESTORE_UNSAFE`
+- `PROFILE_NOT_FOUND`
+- `PROFILE_RESOLUTION_FAILED`

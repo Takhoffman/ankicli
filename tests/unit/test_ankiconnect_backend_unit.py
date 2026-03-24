@@ -65,6 +65,8 @@ def test_backend_capabilities_reports_available_when_version_responds(
     assert capabilities.supported_operations["note.delete"] is False
     assert capabilities.supported_operations["note.add"] is True
     assert capabilities.supported_operations["media.list"] is False
+    assert capabilities.supported_operations["auth.status"] is False
+    assert capabilities.supported_operations["sync.run"] is False
 
 
 @pytest.mark.unit
@@ -221,6 +223,30 @@ def test_media_methods_raise_structured_unsupported_error(monkeypatch: pytest.Mo
     assert attach_excinfo.value.details == {
         "backend": "ankiconnect",
         "operation": "media.attach",
+    }
+
+
+@pytest.mark.unit
+def test_auth_and_sync_methods_raise_structured_unsupported_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_http_connection(monkeypatch, {"version": {"result": 5, "error": None}})
+    backend = AnkiConnectBackend()
+
+    with pytest.raises(BackendOperationUnsupportedError) as auth_excinfo:
+        backend.auth_status(None, credential=None)
+
+    assert auth_excinfo.value.details == {
+        "backend": "ankiconnect",
+        "operation": "auth.status",
+    }
+
+    with pytest.raises(BackendOperationUnsupportedError) as sync_excinfo:
+        backend.sync_run(None, credential=None)
+
+    assert sync_excinfo.value.details == {
+        "backend": "ankiconnect",
+        "operation": "sync.run",
     }
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from ankicli.app.credentials import SyncCredential
 from ankicli.app.models import BackendCapabilities
 
 
@@ -13,6 +14,87 @@ class BaseBackend(ABC):
 
     @abstractmethod
     def backend_capabilities(self) -> BackendCapabilities:
+        raise NotImplementedError
+
+    @abstractmethod
+    def auth_status(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def login(
+        self,
+        collection_path: Path | None,
+        *,
+        username: str,
+        password: str,
+        endpoint: str | None,
+    ) -> SyncCredential:
+        raise NotImplementedError
+
+    @abstractmethod
+    def logout(self, collection_path: Path | None) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def sync_status(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def sync_run(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def sync_pull(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def sync_push(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def create_backup(
+        self,
+        collection_path: Path,
+        *,
+        backup_folder: Path,
+        force: bool,
+    ) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def restore_backup(
+        self,
+        collection_path: Path,
+        *,
+        backup_path: Path,
+        media_folder: Path,
+        media_db_path: Path,
+    ) -> dict:
         raise NotImplementedError
 
     @abstractmethod

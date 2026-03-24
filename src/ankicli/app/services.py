@@ -9,13 +9,18 @@ import platform
 import sys
 from pathlib import Path
 
+from ankicli.app.credentials import CredentialStore, MacOSKeychainCredentialStore
 from ankicli.app.errors import (
+    AuthRequiredError,
     BackendOperationUnsupportedError,
+    BackupNotFoundError,
+    BackupRestoreUnsafeError,
     CollectionRequiredError,
     NotImplementedYetError,
     UnsafeOperationError,
     ValidationError,
 )
+from ankicli.app.profiles import ProfileResolver
 from ankicli.backends.base import BaseBackend
 from ankicli.runtime import configure_anki_source_path
 
@@ -44,6 +49,22 @@ def _parse_field_assignments(assignments: list[str]) -> dict[str, str]:
             raise ValidationError(f"Invalid --field assignment: {assignment}")
         parsed[name] = value
     return parsed
+
+
+def _default_credential_store() -> CredentialStore:
+    return MacOSKeychainCredentialStore()
+
+
+def _default_profile_resolver() -> ProfileResolver:
+    return ProfileResolver()
+
+
+def _with_auto_backup_metadata(result: dict, backup: dict) -> dict:
+    payload = dict(result)
+    payload["auto_backup_created"] = backup["created"]
+    payload["auto_backup_name"] = backup["name"]
+    payload["auto_backup_path"] = backup["path"]
+    return payload
 
 
 class DoctorService:
@@ -149,6 +170,351 @@ class BackendService:
             "available": capabilities.available,
             "notes": capabilities.notes,
         }
+
+
+class AuthService:
+    """Credential-backed sync auth operations."""
+
+    def __init__(self, backend: BaseBackend, *, credential_store: CredentialStore | None = None):
+        self.backend = backend
+        self.credential_store = credential_store or _default_credential_store()
+
+    def status(self, collection_path: str | None) -> dict:
+        credential = self.credential_store.read(backend_name=self.backend.name)
+        return self.backend.auth_status(
+            None if collection_path is None else Path(collection_path),
+            credential=credential,
+        )
+
+    def login(
+        self,
+        collection_path: str | None,
+        *,
+        username: str,
+        password: str,
+        endpoint: str | None,
+    ) -> dict:
+        path = _resolve_collection_arg(
+            self.backend,
+            collection_path,
+            command_name="auth login",
+        )
+        credential = self.backend.login(
+            path,
+            username=username,
+            password=password,
+            endpoint=endpoint,
+        )
+        self.credential_store.write(backend_name=self.backend.name, credential=credential)
+        return {
+            "authenticated": True,
+            "credential_backend": "macos-keychain",
+            "credential_present": True,
+            "endpoint": credential.endpoint,
+        }
+
+    def logout(self, collection_path: str | None) -> dict:
+        result = self.backend.logout(None if collection_path is None else Path(collection_path))
+        deleted = self.credential_store.clear(backend_name=self.backend.name)
+        return {
+            "authenticated": False,
+            "credential_backend": "macos-keychain",
+            "credential_present": False,
+            "deleted": deleted,
+            **result,
+        }
+
+
+class SyncService:
+    """Collection sync operations."""
+
+    def __init__(
+        self,
+        backend: BaseBackend,
+        *,
+        credential_store: CredentialStore | None = None,
+        auto_backup_enabled: bool = True,
+    ):
+        self.backend = backend
+        self.credential_store = credential_store or _default_credential_store()
+        self.backup_service = BackupService(backend)
+        self.auto_backup_enabled = auto_backup_enabled
+
+    def _ensure_supported(self, operation: str) -> None:
+        capabilities = self.backend.backend_capabilities()
+        if not capabilities.supported_operations.get(operation, False):
+            raise BackendOperationUnsupportedError(
+                f"{operation} is not supported by the {self.backend.name} backend",
+                details={"backend": self.backend.name, "operation": operation},
+            )
+
+    def _credential(self):
+        credential = self.credential_store.read(backend_name=self.backend.name)
+        if credential is None:
+            raise AuthRequiredError("Sync credentials are required before syncing")
+        return credential
+
+    def status(self, collection_path: str | None) -> dict:
+        self._ensure_supported("sync.status")
+        path = _resolve_collection_arg(
+            self.backend,
+            collection_path,
+            command_name="sync status",
+        )
+        return self.backend.sync_status(path, credential=self._credential())
+
+    def run(self, collection_path: str | None) -> dict:
+        self._ensure_supported("sync.run")
+        path = _resolve_collection_arg(
+            self.backend,
+            collection_path,
+            command_name="sync run",
+        )
+        backup = self.backup_service.auto_backup(
+            path,
+            enabled=self.auto_backup_enabled,
+            dry_run=False,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.sync_run(path, credential=self._credential()),
+            backup,
+        )
+
+    def pull(self, collection_path: str | None) -> dict:
+        self._ensure_supported("sync.pull")
+        path = _resolve_collection_arg(
+            self.backend,
+            collection_path,
+            command_name="sync pull",
+        )
+        backup = self.backup_service.auto_backup(
+            path,
+            enabled=self.auto_backup_enabled,
+            dry_run=False,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.sync_pull(path, credential=self._credential()),
+            backup,
+        )
+
+    def push(self, collection_path: str | None) -> dict:
+        self._ensure_supported("sync.push")
+        path = _resolve_collection_arg(
+            self.backend,
+            collection_path,
+            command_name="sync push",
+        )
+        backup = self.backup_service.auto_backup(
+            path,
+            enabled=self.auto_backup_enabled,
+            dry_run=False,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.sync_push(path, credential=self._credential()),
+            backup,
+        )
+
+
+class ProfileService:
+    """Local profile discovery services."""
+
+    def __init__(self, backend: BaseBackend, *, resolver: ProfileResolver | None = None) -> None:
+        self.backend = backend
+        self.resolver = resolver or _default_profile_resolver()
+
+    def _ensure_supported(self, operation: str) -> None:
+        if self.backend.name == "ankiconnect":
+            raise BackendOperationUnsupportedError(
+                f"{operation} is not supported by the ankiconnect backend",
+                details={"backend": self.backend.name, "operation": operation},
+            )
+
+    def list(self) -> dict:
+        self._ensure_supported("profile.list")
+        return {"items": [profile.to_dict() for profile in self.resolver.list_profiles()]}
+
+    def get(self, *, name: str) -> dict:
+        self._ensure_supported("profile.get")
+        return self.resolver.resolve_profile(name).to_dict()
+
+    def default(self) -> dict:
+        self._ensure_supported("profile.default")
+        return self.resolver.default_profile().to_dict()
+
+    def resolve(self, *, name: str) -> dict:
+        self._ensure_supported("profile.resolve")
+        return self.resolver.resolve_profile(name).to_dict()
+
+
+class BackupService:
+    """Backup and restore services."""
+
+    def __init__(self, backend: BaseBackend, *, resolver: ProfileResolver | None = None) -> None:
+        self.backend = backend
+        self.resolver = resolver or _default_profile_resolver()
+
+    def _ensure_supported(self, operation: str) -> None:
+        if self.backend.name == "ankiconnect":
+            raise BackendOperationUnsupportedError(
+                f"{operation} is not supported by the ankiconnect backend",
+                details={"backend": self.backend.name, "operation": operation},
+            )
+
+    def _context(self, collection_path: str | None):
+        path = _resolve_collection_arg(self.backend, collection_path, command_name="backup")
+        return self.resolver.resolve_collection(path)
+
+    def _list_items(self, context) -> list[dict]:
+        backup_dir = context.backup_dir
+        if not backup_dir.exists():
+            return []
+        items = []
+        for entry in sorted(backup_dir.glob("*.colpkg"), reverse=True):
+            stat = entry.stat()
+            items.append(
+                {
+                    "name": entry.name,
+                    "path": str(entry.resolve()),
+                    "created_at": stat.st_mtime,
+                    "size": stat.st_size,
+                    "profile": context.name,
+                    "collection_path": str(context.collection_path),
+                    "kind": "anki-native",
+                    "restorable": entry.is_file(),
+                    "notes": [],
+                }
+            )
+        return items
+
+    def status(self, collection_path: str | None) -> dict:
+        self._ensure_supported("backup.status")
+        context = self._context(collection_path)
+        return {
+            "profile": context.name,
+            "collection_path": str(context.collection_path),
+            "backup_dir": str(context.backup_dir),
+            "auto_backup_available": self.backend.name == "python-anki",
+            "backup_count": len(self._list_items(context)),
+            "known_profile": context.known_profile,
+        }
+
+    def list(self, collection_path: str | None) -> dict:
+        self._ensure_supported("backup.list")
+        context = self._context(collection_path)
+        return {"items": self._list_items(context)}
+
+    def get(
+        self,
+        collection_path: str | None,
+        *,
+        name: str | None,
+        path: str | None,
+    ) -> dict:
+        self._ensure_supported("backup.get")
+        context = self._context(collection_path)
+        if bool(name) == bool(path):
+            raise ValidationError("backup get requires exactly one of --name or --path")
+        if path:
+            candidate = Path(path).expanduser().resolve()
+            if not candidate.exists():
+                raise BackupNotFoundError(
+                    f"Backup path does not exist: {candidate}",
+                    details={"path": str(candidate)},
+                )
+            for item in self._list_items(context):
+                if item["path"] == str(candidate):
+                    return item
+            raise BackupNotFoundError(
+                f'Backup "{candidate}" was not found for this collection',
+                details={"path": str(candidate), "collection_path": str(context.collection_path)},
+            )
+        for item in self._list_items(context):
+            if item["name"] == name:
+                return item
+        raise BackupNotFoundError(
+            f'Backup "{name}" was not found',
+            details={"name": name, "collection_path": str(context.collection_path)},
+        )
+
+    def create(self, collection_path: str | None) -> dict:
+        self._ensure_supported("backup.create")
+        context = self._context(collection_path)
+        before = {
+            item["path"]: (
+                item["created_at"],
+                item["size"],
+            )
+            for item in self._list_items(context)
+        }
+        result = self.backend.create_backup(
+            context.collection_path,
+            backup_folder=context.backup_dir,
+            force=True,
+        )
+        after_items = self._list_items(context)
+        created_item = next((item for item in after_items if item["path"] not in before), None)
+        if created_item is None:
+            created_item = next(
+                (
+                    item
+                    for item in after_items
+                    if before.get(item["path"]) != (item["created_at"], item["size"])
+                ),
+                None,
+            )
+        return {
+            "created": bool(result.get("created")) and created_item is not None,
+            "name": created_item["name"] if created_item else None,
+            "path": created_item["path"] if created_item else None,
+            "profile": context.name,
+            "collection_path": str(context.collection_path),
+            "kind": "anki-native",
+        }
+
+    def auto_backup(
+        self,
+        collection_path: Path | str,
+        *,
+        enabled: bool,
+        dry_run: bool,
+    ) -> dict:
+        if self.backend.name != "python-anki" or not enabled or dry_run:
+            return {"created": False, "name": None, "path": None}
+        return self.create(str(collection_path))
+
+    def restore(
+        self,
+        collection_path: str | None,
+        *,
+        name: str | None,
+        path: str | None,
+        yes: bool,
+    ) -> dict:
+        self._ensure_supported("backup.restore")
+        if not yes:
+            raise UnsafeOperationError("backup restore requires --yes")
+        context = self._context(collection_path)
+        collection_lock = CollectionService(self.backend).lock_status(str(context.collection_path))
+        if collection_lock["status"] not in {"not-detected", "unknown"}:
+            raise BackupRestoreUnsafeError(
+                "Collection appears to be in use; refusing restore",
+                details={
+                    "collection_path": str(context.collection_path),
+                    "lock_status": collection_lock,
+                },
+            )
+        backup_item = self.get(str(context.collection_path), name=name, path=path)
+        safety_backup = self.create(str(context.collection_path))
+        result = self.backend.restore_backup(
+            context.collection_path,
+            backup_path=Path(backup_item["path"]),
+            media_folder=context.media_dir,
+            media_db_path=context.media_db_path,
+        )
+        payload = dict(result)
+        payload["safety_backup_name"] = safety_backup["name"]
+        payload["safety_backup_path"] = safety_backup["path"]
+        return payload
 
 
 class CollectionService:
@@ -348,6 +714,7 @@ class MediaService:
 
     def __init__(self, backend: BaseBackend) -> None:
         self.backend = backend
+        self.backup_service = BackupService(backend)
 
     def list(self, collection_path: str | None) -> dict:
         return {
@@ -369,6 +736,7 @@ class MediaService:
         name: str | None,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         normalized_source = source_path.strip()
         if not normalized_source:
@@ -378,11 +746,20 @@ class MediaService:
             raise ValidationError("--name must not be empty")
         if not dry_run and not yes:
             raise UnsafeOperationError("media attach requires --yes or --dry-run")
-        return self.backend.attach_media(
-            _resolve_collection_arg(self.backend, collection_path, command_name="media attach"),
-            source_path=Path(normalized_source),
-            name=normalized_name,
+        path = _resolve_collection_arg(self.backend, collection_path, command_name="media attach")
+        backup = self.backup_service.auto_backup(
+            path,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.attach_media(
+                path,
+                source_path=Path(normalized_source),
+                name=normalized_name,
+                dry_run=dry_run,
+            ),
+            backup,
         )
 
     def orphaned(self, collection_path: str | None) -> dict:
@@ -415,6 +792,7 @@ class TagService:
 
     def __init__(self, backend: BaseBackend) -> None:
         self.backend = backend
+        self.backup_service = BackupService(backend)
 
     def rename(
         self,
@@ -424,6 +802,7 @@ class TagService:
         new_name: str,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         if not collection_path:
             path = _resolve_collection_arg(self.backend, collection_path, command_name="tag rename")
@@ -439,11 +818,19 @@ class TagService:
             raise ValidationError("--to must differ from --name")
         if not dry_run and not yes:
             raise UnsafeOperationError("tag rename requires --yes or --dry-run")
-        return self.backend.rename_tag(
+        backup = self.backup_service.auto_backup(
             path,
-            name=normalized_name,
-            new_name=normalized_new_name,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.rename_tag(
+                path,
+                name=normalized_name,
+                new_name=normalized_new_name,
+                dry_run=dry_run,
+            ),
+            backup,
         )
 
     def delete(
@@ -453,15 +840,24 @@ class TagService:
         tags: list[str],
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="tag delete")
         normalized_tags = self._parse_tags(tags)
         if not dry_run and not yes:
             raise UnsafeOperationError("tag delete requires --yes or --dry-run")
-        return self.backend.delete_tags(
+        backup = self.backup_service.auto_backup(
             path,
-            tags=normalized_tags,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.delete_tags(
+                path,
+                tags=normalized_tags,
+                dry_run=dry_run,
+            ),
+            backup,
         )
 
     def reparent(
@@ -472,6 +868,7 @@ class TagService:
         new_parent: str,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="tag reparent")
         normalized_tags = self._parse_tags(tags)
@@ -480,11 +877,19 @@ class TagService:
             raise ValidationError("--to-parent must differ from the moved tag names")
         if not dry_run and not yes:
             raise UnsafeOperationError("tag reparent requires --yes or --dry-run")
-        return self.backend.reparent_tags(
+        backup = self.backup_service.auto_backup(
             path,
-            tags=normalized_tags,
-            new_parent=normalized_parent,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.reparent_tags(
+                path,
+                tags=normalized_tags,
+                new_parent=normalized_parent,
+                dry_run=dry_run,
+            ),
+            backup,
         )
 
     def apply(
@@ -495,17 +900,26 @@ class TagService:
         tags: list[str],
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="tag apply")
         normalized_tags = self._parse_tags(tags)
         if not dry_run and not yes:
             raise UnsafeOperationError("tag apply requires --yes or --dry-run")
-        return self.backend.add_tags_to_notes(
+        backup = self.backup_service.auto_backup(
             path,
-            note_ids=[note_id],
-            tags=normalized_tags,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
-        )[0]
+        )
+        return _with_auto_backup_metadata(
+            self.backend.add_tags_to_notes(
+                path,
+                note_ids=[note_id],
+                tags=normalized_tags,
+                dry_run=dry_run,
+            )[0],
+            backup,
+        )
 
     def remove(
         self,
@@ -515,17 +929,26 @@ class TagService:
         tags: list[str],
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="tag remove")
         normalized_tags = self._parse_tags(tags)
         if not dry_run and not yes:
             raise UnsafeOperationError("tag remove requires --yes or --dry-run")
-        return self.backend.remove_tags_from_notes(
+        backup = self.backup_service.auto_backup(
             path,
-            note_ids=[note_id],
-            tags=normalized_tags,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
-        )[0]
+        )
+        return _with_auto_backup_metadata(
+            self.backend.remove_tags_from_notes(
+                path,
+                note_ids=[note_id],
+                tags=normalized_tags,
+                dry_run=dry_run,
+            )[0],
+            backup,
+        )
 
     def _parse_tags(self, tags: list[str]) -> list[str]:
         normalized = [tag.strip() for tag in tags if tag.strip()]
@@ -539,6 +962,7 @@ class DeckService:
 
     def __init__(self, backend: BaseBackend) -> None:
         self.backend = backend
+        self.backup_service = BackupService(backend)
 
     def create(
         self,
@@ -547,6 +971,7 @@ class DeckService:
         name: str,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="deck create")
         normalized_name = name.strip()
@@ -554,7 +979,15 @@ class DeckService:
             raise ValidationError("--name must not be empty")
         if not dry_run and not yes:
             raise UnsafeOperationError("deck create requires --yes or --dry-run")
-        return self.backend.create_deck(path, name=normalized_name, dry_run=dry_run)
+        backup = self.backup_service.auto_backup(
+            path,
+            enabled=auto_backup_enabled,
+            dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.create_deck(path, name=normalized_name, dry_run=dry_run),
+            backup,
+        )
 
     def rename(
         self,
@@ -564,6 +997,7 @@ class DeckService:
         new_name: str,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="deck rename")
         normalized_name = name.strip()
@@ -576,11 +1010,19 @@ class DeckService:
             raise ValidationError("--to must differ from --name")
         if not dry_run and not yes:
             raise UnsafeOperationError("deck rename requires --yes or --dry-run")
-        return self.backend.rename_deck(
+        backup = self.backup_service.auto_backup(
             path,
-            name=normalized_name,
-            new_name=normalized_new_name,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.rename_deck(
+                path,
+                name=normalized_name,
+                new_name=normalized_new_name,
+                dry_run=dry_run,
+            ),
+            backup,
         )
 
     def delete(
@@ -590,6 +1032,7 @@ class DeckService:
         name: str,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="deck delete")
         normalized_name = name.strip()
@@ -597,7 +1040,15 @@ class DeckService:
             raise ValidationError("--name must not be empty")
         if not dry_run and not yes:
             raise UnsafeOperationError("deck delete requires --yes or --dry-run")
-        return self.backend.delete_deck(path, name=normalized_name, dry_run=dry_run)
+        backup = self.backup_service.auto_backup(
+            path,
+            enabled=auto_backup_enabled,
+            dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.delete_deck(path, name=normalized_name, dry_run=dry_run),
+            backup,
+        )
 
     def reparent(
         self,
@@ -607,6 +1058,7 @@ class DeckService:
         new_parent: str,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="deck reparent")
         normalized_name = name.strip()
@@ -617,11 +1069,19 @@ class DeckService:
             raise ValidationError("--to-parent must differ from --name")
         if not dry_run and not yes:
             raise UnsafeOperationError("deck reparent requires --yes or --dry-run")
-        return self.backend.reparent_deck(
+        backup = self.backup_service.auto_backup(
             path,
-            name=normalized_name,
-            new_parent=normalized_parent,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.reparent_deck(
+                path,
+                name=normalized_name,
+                new_parent=normalized_parent,
+                dry_run=dry_run,
+            ),
+            backup,
         )
 
 
@@ -933,6 +1393,7 @@ class NoteService:
 
     def __init__(self, backend: BaseBackend) -> None:
         self.backend = backend
+        self.backup_service = BackupService(backend)
 
     def get(self, collection_path: str | None, *, note_id: int) -> dict:
         return self.backend.get_note(
@@ -995,14 +1456,23 @@ class NoteService:
         note_id: int,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="note delete")
         if not dry_run and not yes:
             raise UnsafeOperationError("note delete requires --yes or --dry-run")
-        return self.backend.delete_note(
+        backup = self.backup_service.auto_backup(
             path,
-            note_id=note_id,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.delete_note(
+                path,
+                note_id=note_id,
+                dry_run=dry_run,
+            ),
+            backup,
         )
 
     def add_tags(

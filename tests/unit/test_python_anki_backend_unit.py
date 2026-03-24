@@ -1,18 +1,22 @@
 from __future__ import annotations
 
+import importlib
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from ankicli.app.credentials import SyncCredential
 from ankicli.app.errors import (
+    AuthInvalidError,
     CardNotFoundError,
     CollectionNotFoundError,
     DeckNotFoundError,
     MediaNotFoundError,
     ModelNotFoundError,
     NoteNotFoundError,
+    SyncConflictError,
     TagNotFoundError,
     ValidationError,
 )
@@ -145,6 +149,16 @@ class _FakeCollection:
             remove=self.remove_tags,
             reparent=self.reparent_tags,
         )
+        self._sync_login_args = None
+        self._sync_status_result = SimpleNamespace(required=1, new_endpoint="https://sync-2")
+        self._sync_collection_result = SimpleNamespace(
+            required=1,
+            host_number=7,
+            server_message="server ok",
+            server_media_usn=12,
+            new_endpoint="https://sync-3",
+        )
+        self._full_sync_calls: list[tuple[bool, int | None]] = []
 
     def name(self) -> str:
         return Path(self.path).stem
@@ -208,6 +222,22 @@ class _FakeCollection:
     def reparent_tags(self, tags, new_parent: str):
         self._reparented_tags.append(([str(tag) for tag in tags], new_parent))
 
+    def sync_login(self, username: str, password: str, endpoint: str | None):
+        self._sync_login_args = (username, password, endpoint)
+        return SimpleNamespace(hkey="sync-hkey", endpoint=endpoint)
+
+    def sync_status(self, auth):
+        del auth
+        return self._sync_status_result
+
+    def sync_collection(self, auth, sync_media: bool):
+        del auth, sync_media
+        return self._sync_collection_result
+
+    def full_upload_or_download(self, *, auth, server_usn: int | None, upload: bool):
+        del auth
+        self._full_sync_calls.append((upload, server_usn))
+
     def all_deck_names_and_ids(self):
         return list(self._deck_items)
 
@@ -270,6 +300,182 @@ def test_collection_info_uses_collection_api(
         "model_count": 2,
     }
     assert fake_collection.closed is True
+
+
+@pytest.mark.unit
+def test_auth_status_reports_credential_presence(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: object() if name == "anki" else None,
+    )
+    backend = PythonAnkiBackend()
+
+    result = backend.auth_status(None, credential=SyncCredential(hkey="abc", endpoint="https://sync"))
+
+    assert result == {
+        "authenticated": True,
+        "credential_backend": "macos-keychain",
+        "credential_present": True,
+        "backend_available": True,
+        "supports_sync": True,
+        "endpoint": "https://sync",
+    }
+
+
+@pytest.mark.unit
+def test_login_uses_sync_login_and_returns_sync_credential(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    collection_path.write_text("fixture")
+
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: object() if name == "anki" else None,
+    )
+    backend = PythonAnkiBackend()
+    fake_collection = _FakeCollection(str(collection_path))
+    monkeypatch.setattr(backend, "_load_collection_type", lambda: lambda path: fake_collection)
+
+    result = backend.login(
+        collection_path,
+        username="user",
+        password="secret",
+        endpoint="https://sync",
+    )
+
+    assert result == SyncCredential(hkey="sync-hkey", endpoint="https://sync")
+    assert fake_collection._sync_login_args == ("user", "secret", "https://sync")
+
+
+@pytest.mark.unit
+def test_sync_status_normalizes_required_state(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    collection_path.write_text("fixture")
+
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: object() if name == "anki" else None,
+    )
+    backend = PythonAnkiBackend()
+    fake_collection = _FakeCollection(str(collection_path))
+    monkeypatch.setattr(backend, "_load_collection_type", lambda: lambda path: fake_collection)
+    original_import_module = importlib.import_module
+    monkeypatch.setattr(
+        importlib,
+        "import_module",
+        lambda name: SimpleNamespace(SyncAuth=lambda hkey: SimpleNamespace(hkey=hkey))
+        if name == "anki.sync"
+        else original_import_module(name),
+    )
+
+    result = backend.sync_status(collection_path, credential=SyncCredential(hkey="abc"))
+
+    assert result == {
+        "required": "normal_sync",
+        "required_bool": True,
+        "performed": False,
+        "direction": None,
+        "changes": {},
+        "warnings": [],
+        "conflicts": [],
+        "new_endpoint": "https://sync-2",
+    }
+
+
+@pytest.mark.unit
+def test_sync_run_raises_conflict_on_full_sync_requirement(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    collection_path.write_text("fixture")
+
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: object() if name == "anki" else None,
+    )
+    backend = PythonAnkiBackend()
+    fake_collection = _FakeCollection(str(collection_path))
+    fake_collection._sync_status_result = SimpleNamespace(required=2, new_endpoint=None)
+    monkeypatch.setattr(backend, "_load_collection_type", lambda: lambda path: fake_collection)
+    original_import_module = importlib.import_module
+    monkeypatch.setattr(
+        importlib,
+        "import_module",
+        lambda name: SimpleNamespace(SyncAuth=lambda hkey: SimpleNamespace(hkey=hkey))
+        if name == "anki.sync"
+        else original_import_module(name),
+    )
+
+    with pytest.raises(SyncConflictError):
+        backend.sync_run(collection_path, credential=SyncCredential(hkey="abc"))
+
+
+@pytest.mark.unit
+def test_sync_push_uses_full_upload_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    collection_path.write_text("fixture")
+
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: object() if name == "anki" else None,
+    )
+    backend = PythonAnkiBackend()
+    fake_collection = _FakeCollection(str(collection_path))
+    monkeypatch.setattr(backend, "_load_collection_type", lambda: lambda path: fake_collection)
+    original_import_module = importlib.import_module
+    monkeypatch.setattr(
+        importlib,
+        "import_module",
+        lambda name: SimpleNamespace(SyncAuth=lambda hkey: SimpleNamespace(hkey=hkey))
+        if name == "anki.sync"
+        else original_import_module(name),
+    )
+
+    result = backend.sync_push(collection_path, credential=SyncCredential(hkey="abc"))
+
+    assert result["direction"] == "push"
+    assert fake_collection._full_sync_calls == [(True, None)]
+
+
+@pytest.mark.unit
+def test_login_maps_auth_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    collection_path.write_text("fixture")
+
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: object() if name == "anki" else None,
+    )
+    backend = PythonAnkiBackend()
+    fake_collection = _FakeCollection(str(collection_path))
+
+    def fail_login(username: str, password: str, endpoint: str | None):
+        del username, password, endpoint
+        raise RuntimeError("auth failed")
+
+    fake_collection.sync_login = fail_login
+    monkeypatch.setattr(backend, "_load_collection_type", lambda: lambda path: fake_collection)
+
+    with pytest.raises(AuthInvalidError):
+        backend.login(collection_path, username="user", password="bad", endpoint=None)
 
 
 @pytest.mark.unit

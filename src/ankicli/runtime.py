@@ -14,8 +14,10 @@ from ankicli.backends.python_anki import PythonAnkiBackend
 @dataclass(slots=True)
 class Settings:
     collection: str | None
+    profile: str | None
     backend_name: str
     json_output: bool
+    no_auto_backup: bool
 
 
 def configure_anki_source_path() -> str | None:

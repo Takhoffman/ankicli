@@ -8,6 +8,9 @@ adapt `ankicli --json` output, not reimplement Anki logic in TypeScript.
 The initial OpenClaw plugin surface may call these commands:
 
 - `ankicli collection info --json`
+- `ankicli auth status --json`
+- `ankicli sync status --json`
+- `ankicli sync run --json`
 - `ankicli deck list --json`
 - `ankicli model list --json`
 - `ankicli search notes --query <query> --json`
@@ -23,7 +26,14 @@ environment:
 
 - `--backend`
 - `--collection`
+- `--profile`
 - `ANKICONNECT_URL`
+
+The plugin should not expose:
+
+- `backup restore`
+- profile-admin flows
+- direct credential capture or `auth login`/`auth logout`
 
 ## JSON Envelope Contract
 
@@ -69,6 +79,27 @@ The plugin should preserve `data` shapes instead of inventing a second schema.
   - `card_count`
   - `deck_count`
   - `model_count`
+- `auth status`
+  - `authenticated`
+  - `credential_backend`
+  - `credential_present`
+  - `backend_available`
+  - `supports_sync`
+- `sync status`
+  - `required`
+  - `required_bool`
+  - `performed`
+  - `direction`
+  - `changes`
+  - `warnings`
+  - `conflicts`
+- `sync run`
+  - `required`
+  - `performed`
+  - `direction`
+  - `changes`
+  - `warnings`
+  - `conflicts`
 - `deck list`
   - `items`: array of `{id, name}`
 - `model list`
@@ -130,6 +161,17 @@ The plugin should preserve these codes when available:
 - `DECK_NOT_FOUND`
 - `MODEL_NOT_FOUND`
 - `UNSAFE_OPERATION`
+- `AUTH_REQUIRED`
+- `AUTH_INVALID`
+- `AUTH_STORAGE_UNAVAILABLE`
+- `SYNC_UNAVAILABLE`
+- `SYNC_CONFLICT`
+- `SYNC_IN_PROGRESS`
+- `SYNC_FAILED`
+- `BACKUP_NOT_FOUND`
+- `BACKUP_RESTORE_UNSAFE`
+- `PROFILE_NOT_FOUND`
+- `PROFILE_RESOLUTION_FAILED`
 
 Useful stable `error.details` keys when present:
 

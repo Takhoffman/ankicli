@@ -39,6 +39,28 @@ def test_collection_info_without_path_is_structured_error(runner) -> None:
 
 
 @pytest.mark.unit
+def test_collection_and_profile_are_mutually_exclusive(runner, tmp_path) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    collection_path.write_text("fixture")
+
+    result = runner.invoke(
+        args=[
+            "--json",
+            "--collection",
+            str(collection_path),
+            "--profile",
+            "User 1",
+            "collection",
+            "info",
+        ],
+    )
+
+    assert result.exit_code == 2
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.unit
 def test_collection_info_missing_file_is_structured_error(runner, tmp_path) -> None:
     collection_path = tmp_path / "missing.anki2"
 
@@ -64,6 +86,79 @@ def test_ankiconnect_backend_capabilities_expose_operation_matrix(runner) -> Non
     assert operations["tag.rename"] is False
     assert operations["collection.validate"] is False
     assert operations["media.list"] is False
+    assert operations["auth.status"] is False
+    assert operations["sync.run"] is False
+    assert operations["profile.list"] is False
+    assert operations["backup.restore"] is False
+
+
+@pytest.mark.unit
+def test_auth_status_on_ankiconnect_is_structured_unsupported(runner) -> None:
+    result = runner.invoke(args=["--json", "--backend", "ankiconnect", "auth", "status"])
+
+    assert result.exit_code == 14
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "BACKEND_OPERATION_UNSUPPORTED"
+    assert payload["error"]["details"] == {
+        "backend": "ankiconnect",
+        "operation": "auth.status",
+    }
+
+
+@pytest.mark.unit
+def test_profile_list_on_ankiconnect_is_structured_unsupported(runner) -> None:
+    result = runner.invoke(args=["--json", "--backend", "ankiconnect", "profile", "list"])
+
+    assert result.exit_code == 14
+    payload = json.loads(result.stdout)
+    assert payload["error"]["details"] == {
+        "backend": "ankiconnect",
+        "operation": "profile.list",
+    }
+
+
+@pytest.mark.unit
+def test_backup_restore_requires_yes(runner, tmp_path) -> None:
+    collection_path = tmp_path / "collection.anki2"
+    collection_path.write_text("fixture")
+
+    result = runner.invoke(
+        args=[
+            "--json",
+            "--collection",
+            str(collection_path),
+            "backup",
+            "restore",
+            "--name",
+            "backup-2026.colpkg",
+        ],
+    )
+
+    assert result.exit_code == 12
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "UNSAFE_OPERATION"
+
+
+@pytest.mark.unit
+def test_sync_status_without_path_is_structured_error(runner) -> None:
+    result = runner.invoke(args=["--json", "sync", "status"])
+
+    assert result.exit_code == 4
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "COLLECTION_REQUIRED"
+
+
+@pytest.mark.unit
+def test_sync_run_on_ankiconnect_is_structured_unsupported(runner) -> None:
+    result = runner.invoke(args=["--json", "--backend", "ankiconnect", "sync", "run"])
+
+    assert result.exit_code == 14
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "BACKEND_OPERATION_UNSUPPORTED"
+    assert payload["error"]["details"] == {
+        "backend": "ankiconnect",
+        "operation": "sync.run",
+    }
 
 
 @pytest.mark.unit

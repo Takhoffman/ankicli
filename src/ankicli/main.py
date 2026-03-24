@@ -15,8 +15,11 @@ from ankicli.app.output import (
     render_ndjson,
     success_envelope,
 )
+from ankicli.app.profiles import ProfileResolver
 from ankicli.app.services import (
+    AuthService,
     BackendService,
+    BackupService,
     CardService,
     CatalogService,
     CollectionService,
@@ -26,7 +29,9 @@ from ankicli.app.services import (
     ImportService,
     MediaService,
     NoteService,
+    ProfileService,
     SearchService,
+    SyncService,
     TagService,
 )
 from ankicli.runtime import Settings, get_backend
@@ -38,6 +43,9 @@ app = typer.Typer(
 )
 doctor_app = typer.Typer(no_args_is_help=True, help="Inspect environment and backend state.")
 backend_app = typer.Typer(no_args_is_help=True, help="Inspect available backends and capabilities.")
+auth_app = typer.Typer(no_args_is_help=True, help="Manage sync credentials for the active backend.")
+profile_app = typer.Typer(no_args_is_help=True, help="Inspect and resolve local Anki profiles.")
+backup_app = typer.Typer(no_args_is_help=True, help="Create, inspect, and restore local backups.")
 collection_app = typer.Typer(no_args_is_help=True, help="Inspect collection-level metadata.")
 deck_app = typer.Typer(no_args_is_help=True, help="Inspect decks in a collection.")
 model_app = typer.Typer(no_args_is_help=True, help="Inspect note types in a collection.")
@@ -51,12 +59,16 @@ import_app = typer.Typer(
     no_args_is_help=True,
     help="Import normalized JSON data into a collection.",
 )
+sync_app = typer.Typer(no_args_is_help=True, help="Inspect and run collection sync flows.")
 note_app = typer.Typer(no_args_is_help=True, help="Inspect and mutate notes.")
 card_app = typer.Typer(no_args_is_help=True, help="Inspect and mutate cards.")
 tag_app = typer.Typer(no_args_is_help=True, help="Inspect tags in a collection.")
 
 app.add_typer(doctor_app, name="doctor")
 app.add_typer(backend_app, name="backend")
+app.add_typer(auth_app, name="auth")
+app.add_typer(profile_app, name="profile")
+app.add_typer(backup_app, name="backup")
 app.add_typer(collection_app, name="collection")
 app.add_typer(deck_app, name="deck")
 app.add_typer(model_app, name="model")
@@ -64,6 +76,7 @@ app.add_typer(media_app, name="media")
 app.add_typer(search_app, name="search")
 app.add_typer(export_app, name="export")
 app.add_typer(import_app, name="import")
+app.add_typer(sync_app, name="sync")
 app.add_typer(note_app, name="note")
 app.add_typer(card_app, name="card")
 app.add_typer(tag_app, name="tag")
@@ -90,6 +103,18 @@ def get_settings(ctx: typer.Context) -> Settings:
     return ctx.obj
 
 
+def _emit_startup_error(
+    *,
+    backend_name: str,
+    json_output: bool,
+    error: AnkiCliError,
+) -> None:
+    envelope = error_envelope(error, backend=backend_name)
+    text = render_json(envelope) if json_output else render_human(envelope)
+    typer.echo(text)
+    raise typer.Exit(error.exit_code)
+
+
 def _version_callback(value: bool) -> None:
     if value:
         typer.echo(__version__)
@@ -100,15 +125,48 @@ def _version_callback(value: bool) -> None:
 def main(
     ctx: typer.Context,
     collection: Annotated[str | None, typer.Option("--collection")] = None,
+    profile: Annotated[str | None, typer.Option("--profile")] = None,
     backend: Annotated[str, typer.Option("--backend")] = "python-anki",
     json_output: Annotated[bool, typer.Option("--json")] = False,
+    no_auto_backup: Annotated[bool, typer.Option("--no-auto-backup")] = False,
     version: Annotated[
         bool,
         typer.Option("--version", callback=_version_callback, is_eager=True),
     ] = False,
 ) -> None:
     del version
-    ctx.obj = Settings(collection=collection, backend_name=backend, json_output=json_output)
+    if collection and profile:
+        _emit_startup_error(
+            backend_name=backend,
+            json_output=json_output,
+            error=ValidationError("--collection and --profile are mutually exclusive"),
+        )
+    resolved_collection = collection
+    resolved_profile = profile
+    if profile:
+        if backend == "ankiconnect":
+            _emit_startup_error(
+                backend_name=backend,
+                json_output=json_output,
+                error=ValidationError("--profile is not supported with the ankiconnect backend"),
+            )
+        try:
+            context = ProfileResolver().resolve_profile(profile)
+        except AnkiCliError as error:
+            _emit_startup_error(
+                backend_name=backend,
+                json_output=json_output,
+                error=error,
+            )
+        resolved_collection = str(context.collection_path)
+        resolved_profile = context.name
+    ctx.obj = Settings(
+        collection=resolved_collection,
+        profile=resolved_profile,
+        backend_name=backend,
+        json_output=json_output,
+        no_auto_backup=no_auto_backup,
+    )
 
 
 @doctor_app.command("env", help="Report Python, platform, and Anki import-path diagnostics.")
@@ -205,6 +263,187 @@ def backend_test_connection(ctx: typer.Context) -> None:
     emit(settings, data=BackendService(backend).test_connection())
 
 
+@auth_app.command(
+    "status",
+    help="Report whether sync credentials are stored for the active backend.",
+)
+def auth_status(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = AuthService(backend).status(settings.collection)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@auth_app.command(
+    "login",
+    help="Log in for sync and store credentials in the OS keychain when supported.",
+)
+def auth_login(
+    ctx: typer.Context,
+    username: Annotated[str, typer.Option("--username", prompt=True)],
+    password: Annotated[str, typer.Option("--password", prompt=True, hide_input=True)],
+    endpoint: Annotated[str | None, typer.Option("--endpoint")] = None,
+) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = AuthService(backend).login(
+            settings.collection,
+            username=username,
+            password=password,
+            endpoint=endpoint,
+        )
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@auth_app.command("logout", help="Delete stored sync credentials for the active backend.")
+def auth_logout(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = AuthService(backend).logout(settings.collection)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@profile_app.command("list", help="List local Anki profiles from the Anki2 data root.")
+def profile_list(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = ProfileService(backend).list()
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@profile_app.command("get", help="Inspect one local Anki profile by name.")
+def profile_get(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Option("--name")],
+) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = ProfileService(backend).get(name=name)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@profile_app.command("default", help="Show the default local Anki profile.")
+def profile_default(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = ProfileService(backend).default()
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@profile_app.command("resolve", help="Resolve a profile name into its collection and media paths.")
+def profile_resolve(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Option("--name")],
+) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = ProfileService(backend).resolve(name=name)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@backup_app.command(
+    "status",
+    help="Show backup context and availability for the current collection.",
+)
+def backup_status(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = BackupService(backend).status(settings.collection)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@backup_app.command("list", help="List normalized backups for the current collection.")
+def backup_list(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = BackupService(backend).list(settings.collection)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@backup_app.command("create", help="Create a backup now for the current collection.")
+def backup_create(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = BackupService(backend).create(settings.collection)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@backup_app.command("get", help="Inspect one backup by name or absolute path.")
+def backup_get(
+    ctx: typer.Context,
+    name: Annotated[str | None, typer.Option("--name")] = None,
+    path: Annotated[str | None, typer.Option("--path")] = None,
+) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = BackupService(backend).get(settings.collection, name=name, path=path)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@backup_app.command(
+    "restore",
+    help="Restore a backup by name or path. Requires --yes and remains CLI-only.",
+)
+def backup_restore(
+    ctx: typer.Context,
+    name: Annotated[str | None, typer.Option("--name")] = None,
+    path: Annotated[str | None, typer.Option("--path")] = None,
+    yes: Annotated[bool, typer.Option("--yes")] = False,
+) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = BackupService(backend).restore(settings.collection, name=name, path=path, yes=yes)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
 @collection_app.command("info", help="Show high-level collection metadata and counts.")
 def collection_info(ctx: typer.Context) -> None:
     settings = get_settings(ctx)
@@ -253,6 +492,72 @@ def collection_lock_status(ctx: typer.Context) -> None:
     backend = get_backend(settings.backend_name)
     try:
         data = CollectionService(backend).lock_status(settings.collection)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@sync_app.command("status", help="Report whether sync is required for the current collection.")
+def sync_status(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = SyncService(
+            backend,
+            auto_backup_enabled=not settings.no_auto_backup,
+        ).status(settings.collection)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@sync_app.command("run", help="Run the normal bidirectional sync flow for the current collection.")
+def sync_run(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = SyncService(
+            backend,
+            auto_backup_enabled=not settings.no_auto_backup,
+        ).run(settings.collection)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@sync_app.command(
+    "pull",
+    help="Run an explicit full download sync flow for the current collection.",
+)
+def sync_pull(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = SyncService(
+            backend,
+            auto_backup_enabled=not settings.no_auto_backup,
+        ).pull(settings.collection)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@sync_app.command(
+    "push",
+    help="Run an explicit full upload sync flow for the current collection.",
+)
+def sync_push(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = SyncService(
+            backend,
+            auto_backup_enabled=not settings.no_auto_backup,
+        ).push(settings.collection)
     except AnkiCliError as error:
         emit(settings, error=error)
         return
@@ -316,6 +621,7 @@ def deck_create(
             name=name,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -340,6 +646,7 @@ def deck_rename(
             new_name=new_name,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -362,6 +669,7 @@ def deck_delete(
             name=name,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -392,6 +700,7 @@ def deck_reparent(
             new_parent=to_parent,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -526,6 +835,7 @@ def media_attach(
             name=name,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -595,6 +905,7 @@ def tag_apply(
             tags=tag or [],
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -622,6 +933,7 @@ def tag_remove(
             tags=tag or [],
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -646,6 +958,7 @@ def tag_rename(
             new_name=new_name,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -668,6 +981,7 @@ def tag_delete(
             tags=tag or [],
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -698,6 +1012,7 @@ def tag_reparent(
             new_parent=to_parent,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -998,6 +1313,7 @@ def note_delete(
             note_id=note_id,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)

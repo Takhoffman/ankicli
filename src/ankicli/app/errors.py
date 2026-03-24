@@ -83,3 +83,73 @@ class BackendOperationUnsupportedError(AnkiCliError):
 class MediaNotFoundError(AnkiCliError):
     code = "MEDIA_NOT_FOUND"
     exit_code = 15
+
+
+class AuthRequiredError(AnkiCliError):
+    code = "AUTH_REQUIRED"
+    exit_code = 16
+
+
+class AuthInvalidError(AnkiCliError):
+    code = "AUTH_INVALID"
+    exit_code = 17
+
+
+class AuthStorageUnavailableError(AnkiCliError):
+    code = "AUTH_STORAGE_UNAVAILABLE"
+    exit_code = 18
+
+
+class SyncUnavailableError(AnkiCliError):
+    code = "SYNC_UNAVAILABLE"
+    exit_code = 19
+
+
+class SyncConflictError(AnkiCliError):
+    code = "SYNC_CONFLICT"
+    exit_code = 20
+
+
+class SyncInProgressError(AnkiCliError):
+    code = "SYNC_IN_PROGRESS"
+    exit_code = 21
+
+
+class SyncFailedError(AnkiCliError):
+    code = "SYNC_FAILED"
+    exit_code = 22
+
+
+class BackupUnavailableError(AnkiCliError):
+    code = "BACKUP_UNAVAILABLE"
+    exit_code = 23
+
+
+class BackupNotFoundError(AnkiCliError):
+    code = "BACKUP_NOT_FOUND"
+    exit_code = 24
+
+
+class BackupCreateFailedError(AnkiCliError):
+    code = "BACKUP_CREATE_FAILED"
+    exit_code = 25
+
+
+class BackupRestoreFailedError(AnkiCliError):
+    code = "BACKUP_RESTORE_FAILED"
+    exit_code = 26
+
+
+class BackupRestoreUnsafeError(AnkiCliError):
+    code = "BACKUP_RESTORE_UNSAFE"
+    exit_code = 27
+
+
+class ProfileNotFoundError(AnkiCliError):
+    code = "PROFILE_NOT_FOUND"
+    exit_code = 28
+
+
+class ProfileResolutionError(AnkiCliError):
+    code = "PROFILE_RESOLUTION_FAILED"
+    exit_code = 29

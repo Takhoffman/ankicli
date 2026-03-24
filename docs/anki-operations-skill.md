@@ -38,14 +38,19 @@ It should not duplicate the full CLI or plugin reference.
 - For write-capable operations that support `dry_run`, use it before real
   mutation unless the user explicitly wants immediate execution.
 
-4. Preserve structured errors.
+4. Treat sync and backup as different safety tools.
+- `sync` keeps local and remote state aligned.
+- `backup` is for rollback.
+- Do not present sync as a substitute for a restorable snapshot.
+
+5. Preserve structured errors.
 - Treat `ankicli` error codes as authoritative. Do not invent alternate error
   meanings.
 
-5. Re-verify after writes.
+6. Re-verify after writes.
 - After any mutation, run a read operation to confirm the expected state.
 
-6. Respect backend limits.
+7. Respect backend limits.
 - If the active backend reports unsupported behavior, switch strategy or explain
   the limitation instead of guessing.
 
@@ -79,7 +84,12 @@ Good targets:
 
 - `doctor backend`
 - `backend capabilities`
+- `profile default`
+- `profile resolve`
+- `auth status`
+- `backup status`
 - `collection info`
+- `sync status`
 - `search count`
 - `search preview`
 - `note get`
@@ -161,6 +171,7 @@ Good targets:
 
 - `search count`
 - `search preview`
+- `backup create`
 - `export notes`
 - `import patch`
 
@@ -185,6 +196,22 @@ Interpret these codes consistently:
   - rerun only with explicit user intent and the required confirmation semantics
 - `VALIDATION_ERROR`
   - fix the payload, flags, or field names before retrying
+- `AUTH_REQUIRED`
+  - log in first or confirm stored sync credentials exist
+- `AUTH_INVALID`
+  - stored credentials are stale or bad; log in again
+- `AUTH_STORAGE_UNAVAILABLE`
+  - OS secret storage is unavailable; stop and fix the host environment
+- `BACKUP_RESTORE_UNSAFE`
+  - restore is blocked by lock/open-state or context mismatch; do not force it
+- `PROFILE_NOT_FOUND`, `PROFILE_RESOLUTION_FAILED`
+  - local profile targeting is wrong or the Anki data root is unavailable
+- `SYNC_CONFLICT`
+  - explicit pull/push choice is required; do not guess
+- `SYNC_IN_PROGRESS`
+  - wait or resolve the existing sync instead of retrying blindly
+- `SYNC_FAILED`
+  - inspect backend details and avoid repeating writes until sync state is clear
 
 ## Backend Strategy
 
@@ -193,6 +220,8 @@ Prefer `python-anki` when:
 - local collection semantics matter
 - richer local operations are needed
 - file or collection diagnostics are relevant
+- profile resolution or backup/restore is required
+- standalone sync/auth is required
 
 Prefer `ankiconnect` when:
 

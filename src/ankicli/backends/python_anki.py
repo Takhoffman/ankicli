@@ -11,9 +11,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ankicli.app.credentials import SyncCredential
 from ankicli.app.errors import (
     AnkiCliError,
+    AuthInvalidError,
+    AuthRequiredError,
     BackendUnavailableError,
+    BackupCreateFailedError,
+    BackupRestoreFailedError,
     CardNotFoundError,
     CollectionNotFoundError,
     CollectionOpenError,
@@ -21,6 +26,9 @@ from ankicli.app.errors import (
     MediaNotFoundError,
     ModelNotFoundError,
     NoteNotFoundError,
+    SyncConflictError,
+    SyncFailedError,
+    SyncInProgressError,
     TagNotFoundError,
     ValidationError,
 )
@@ -37,7 +45,18 @@ class PythonAnkiBackend(BaseBackend):
 
     def supported_operations(self) -> dict[str, bool]:
         available = importlib.util.find_spec("anki") is not None
-        return {operation: available for operation in IMPLEMENTED_BACKEND_OPERATIONS}
+        supported = {operation: available for operation in IMPLEMENTED_BACKEND_OPERATIONS}
+        for operation in (
+            "profile.list",
+            "profile.get",
+            "profile.default",
+            "profile.resolve",
+            "backup.status",
+            "backup.list",
+            "backup.get",
+        ):
+            supported[operation] = True
+        return supported
 
     def backend_capabilities(self) -> BackendCapabilities:
         available = importlib.util.find_spec("anki") is not None
@@ -53,6 +72,293 @@ class PythonAnkiBackend(BaseBackend):
             supported_operations=self.supported_operations(),
             notes=notes,
         )
+
+    def _normalize_sync_required(self, value: Any) -> str:
+        mapping = {
+            0: "no_changes",
+            1: "normal_sync",
+            2: "full_sync",
+            3: "full_download",
+            4: "full_upload",
+        }
+        if hasattr(value, "value"):
+            value = value.value
+        return mapping.get(int(value), f"unknown:{value}")
+
+    def _credential_to_auth(self, credential: SyncCredential | None) -> Any:
+        if credential is None:
+            raise AuthRequiredError("Sync credentials are required before syncing")
+        sync_module = importlib.import_module("anki.sync")
+        auth_type = getattr(sync_module, "SyncAuth", None)
+        if auth_type is None:
+            raise BackendUnavailableError(
+                "Python-Anki sync auth API is unavailable in this environment",
+            )
+        auth = auth_type(hkey=credential.hkey)
+        if credential.endpoint:
+            auth.endpoint = credential.endpoint
+        return auth
+
+    def _persisted_endpoint(self, payload: Any) -> str | None:
+        endpoint = getattr(payload, "new_endpoint", None)
+        if endpoint:
+            return str(endpoint)
+        return None
+
+    def _normalize_sync_status(self, status: Any) -> dict:
+        return {
+            "required": self._normalize_sync_required(getattr(status, "required", 0)),
+            "required_bool": self._normalize_sync_required(getattr(status, "required", 0))
+            != "no_changes",
+            "new_endpoint": self._persisted_endpoint(status),
+        }
+
+    def _map_sync_exception(self, exc: Exception, *, collection_path: Path) -> None:
+        message = str(exc).strip() or type(exc).__name__
+        lowered = message.lower()
+        details = {
+            "path": str(collection_path),
+            "reason": message,
+            "exception_type": type(exc).__name__,
+        }
+        if "auth" in lowered or "password" in lowered or "hkey" in lowered:
+            raise AuthInvalidError(message, details=details) from exc
+        if "in progress" in lowered or "already sync" in lowered:
+            raise SyncInProgressError(message, details=details) from exc
+        if "full sync" in lowered or "upload" in lowered or "download" in lowered:
+            raise SyncConflictError(message, details=details) from exc
+        raise SyncFailedError(message, details=details) from exc
+
+    def auth_status(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        del collection_path
+        capabilities = self.backend_capabilities()
+        return {
+            "authenticated": credential is not None,
+            "credential_backend": "macos-keychain",
+            "credential_present": credential is not None,
+            "backend_available": capabilities.available,
+            "supports_sync": capabilities.supported_operations.get("sync.run", False),
+            "endpoint": credential.endpoint if credential else None,
+        }
+
+    def login(
+        self,
+        collection_path: Path | None,
+        *,
+        username: str,
+        password: str,
+        endpoint: str | None,
+    ) -> SyncCredential:
+        if collection_path is None:
+            raise CollectionNotFoundError("A collection path is required for auth login")
+        resolved_path = self._resolve_collection_path(collection_path)
+        with self._open_collection(resolved_path) as collection:
+            try:
+                auth = collection.sync_login(
+                    username=username,
+                    password=password,
+                    endpoint=endpoint,
+                )
+            except Exception as exc:
+                self._map_sync_exception(exc, collection_path=resolved_path)
+        return SyncCredential(
+            hkey=str(getattr(auth, "hkey", "")).strip(),
+            endpoint=self._persisted_endpoint(auth) or endpoint,
+        )
+
+    def logout(self, collection_path: Path | None) -> dict:
+        del collection_path
+        return {"backend": self.name}
+
+    def sync_status(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        if collection_path is None:
+            raise CollectionNotFoundError("A collection path is required for sync status")
+        resolved_path = self._resolve_collection_path(collection_path)
+        auth = self._credential_to_auth(credential)
+        with self._open_collection(resolved_path) as collection:
+            try:
+                status = collection.sync_status(auth)
+            except Exception as exc:
+                self._map_sync_exception(exc, collection_path=resolved_path)
+        normalized = self._normalize_sync_status(status)
+        return {
+            "required": normalized["required"],
+            "required_bool": normalized["required_bool"],
+            "performed": False,
+            "direction": None,
+            "changes": {},
+            "warnings": [],
+            "conflicts": [],
+            "new_endpoint": normalized["new_endpoint"],
+        }
+
+    def sync_run(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        if collection_path is None:
+            raise CollectionNotFoundError("A collection path is required for sync run")
+        resolved_path = self._resolve_collection_path(collection_path)
+        auth = self._credential_to_auth(credential)
+        with self._open_collection(resolved_path) as collection:
+            try:
+                status = collection.sync_status(auth)
+                normalized_status = self._normalize_sync_status(status)
+                if normalized_status["required"] == "full_sync":
+                    raise SyncConflictError(
+                        "Full sync required; use sync pull or sync push explicitly",
+                        details={
+                            "path": str(resolved_path),
+                            "required": normalized_status["required"],
+                        },
+                    )
+                result = collection.sync_collection(auth, True)
+            except AnkiCliError:
+                raise
+            except Exception as exc:
+                self._map_sync_exception(exc, collection_path=resolved_path)
+        required = self._normalize_sync_required(getattr(result, "required", 0))
+        return {
+            "required": required,
+            "performed": required != "no_changes",
+            "direction": "bidirectional",
+            "changes": {
+                "host_number": int(getattr(result, "host_number", 0)),
+                "server_media_usn": int(getattr(result, "server_media_usn", 0)),
+            },
+            "warnings": [str(getattr(result, "server_message", "")).strip()]
+            if str(getattr(result, "server_message", "")).strip()
+            else [],
+            "conflicts": [],
+            "new_endpoint": self._persisted_endpoint(result) or normalized_status["new_endpoint"],
+        }
+
+    def sync_pull(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        return self._full_sync_direction(collection_path, credential=credential, upload=False)
+
+    def sync_push(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+    ) -> dict:
+        return self._full_sync_direction(collection_path, credential=credential, upload=True)
+
+    def create_backup(
+        self,
+        collection_path: Path,
+        *,
+        backup_folder: Path,
+        force: bool,
+    ) -> dict:
+        resolved_path = self._resolve_collection_path(collection_path)
+        backup_folder.mkdir(parents=True, exist_ok=True)
+        with self._open_collection(resolved_path) as collection:
+            try:
+                created = bool(
+                    collection.create_backup(
+                        backup_folder=str(backup_folder),
+                        force=force,
+                        wait_for_completion=True,
+                    )
+                )
+                await_completion = getattr(collection, "await_backup_completion", None)
+                if callable(await_completion):
+                    await_completion()
+            except Exception as exc:
+                raise BackupCreateFailedError(
+                    f"Failed to create backup for {resolved_path}",
+                    details={"path": str(resolved_path), "reason": str(exc)},
+                ) from exc
+        return {"created": created}
+
+    def restore_backup(
+        self,
+        collection_path: Path,
+        *,
+        backup_path: Path,
+        media_folder: Path,
+        media_db_path: Path,
+    ) -> dict:
+        resolved_path = self._resolve_collection_path(collection_path)
+        with self._open_collection(resolved_path) as collection:
+            try:
+                close_for_full_sync = getattr(collection, "close_for_full_sync", None)
+                if callable(close_for_full_sync):
+                    close_for_full_sync()
+                backend = getattr(collection, "_backend", None)
+                if backend is None or not hasattr(backend, "import_collection_package"):
+                    raise BackendUnavailableError(
+                        "Python-Anki import collection package API "
+                        "is unavailable in this environment",
+                    )
+                backend.import_collection_package(
+                    col_path=str(resolved_path),
+                    backup_path=str(backup_path.resolve()),
+                    media_folder=str(media_folder.resolve()),
+                    media_db=str(media_db_path.resolve()),
+                )
+            except AnkiCliError:
+                raise
+            except Exception as exc:
+                raise BackupRestoreFailedError(
+                    f"Failed to restore backup into {resolved_path}",
+                    details={
+                        "path": str(resolved_path),
+                        "backup_path": str(backup_path.resolve()),
+                        "reason": str(exc),
+                    },
+                ) from exc
+        return {
+            "restored": True,
+            "backup_path": str(backup_path.resolve()),
+            "collection_path": str(resolved_path),
+        }
+
+    def _full_sync_direction(
+        self,
+        collection_path: Path | None,
+        *,
+        credential: SyncCredential | None,
+        upload: bool,
+    ) -> dict:
+        if collection_path is None:
+            raise CollectionNotFoundError(
+                f"A collection path is required for sync {'push' if upload else 'pull'}",
+            )
+        resolved_path = self._resolve_collection_path(collection_path)
+        auth = self._credential_to_auth(credential)
+        with self._open_collection(resolved_path) as collection:
+            try:
+                collection.full_upload_or_download(auth=auth, server_usn=None, upload=upload)
+            except Exception as exc:
+                self._map_sync_exception(exc, collection_path=resolved_path)
+        return {
+            "required": "full_upload" if upload else "full_download",
+            "performed": True,
+            "direction": "push" if upload else "pull",
+            "changes": {},
+            "warnings": ["media sync skipped during explicit full sync"],
+            "conflicts": [],
+            "new_endpoint": credential.endpoint if credential else None,
+        }
 
     def _require_available(self) -> None:
         if not self.backend_capabilities().available:

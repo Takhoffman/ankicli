@@ -12,9 +12,10 @@ This skill is the workflow layer above `ankicli` and the repo-owned OpenClaw plu
 1. Read before write. Inspect the collection, search narrowly, and fetch a representative note or card before changing anything.
 2. Prefer `--dry-run` first whenever the command supports it, unless the user clearly wants immediate execution.
 3. Re-verify after mutations with a follow-up read, search, or stats command.
-4. Preserve structured `ankicli` errors. Do not reinterpret codes into vague summaries.
-5. Use the narrowest command or tool that solves the task. Do not jump straight to bulk operations.
-6. Respect backend limits. If the active backend reports `BACKEND_OPERATION_UNSUPPORTED`, switch backend or explain the limit.
+4. Treat sync and backup as different tools. Sync keeps local and remote state aligned; backup is the rollback path.
+5. Preserve structured `ankicli` errors. Do not reinterpret codes into vague summaries.
+6. Use the narrowest command or tool that solves the task. Do not jump straight to bulk operations.
+7. Respect backend limits. If the active backend reports `BACKEND_OPERATION_UNSUPPORTED`, switch backend or explain the limit.
 
 ## Transport Choice
 
@@ -28,7 +29,11 @@ This skill is the workflow layer above `ankicli` and the repo-owned OpenClaw plu
 
 Use this before any meaningful change:
 - identify backend and capabilities
+- resolve the profile when local profile targeting matters
+- inspect auth status if sync or remote state matters
+- inspect backup status when rollback matters
 - inspect collection info or stats
+- use `sync status` before assuming local and remote state match
 - list decks or models if the target is not known
 - use `search count` or `search preview` before wide changes
 - fetch the exact note or card before mutating it
@@ -73,6 +78,8 @@ Default preference:
 
 Switch to `python-anki` when you need:
 - local collection validation or lock checks
+- local profile resolution or backup/restore
+- standalone sync/auth
 - deck lifecycle writes
 - tag lifecycle writes
 - media operations
@@ -90,6 +97,13 @@ Stay on `ankiconnect` when you need:
 - `NOTE_NOT_FOUND`, `CARD_NOT_FOUND`, `DECK_NOT_FOUND`, `MODEL_NOT_FOUND`, `TAG_NOT_FOUND`: stop and re-search instead of guessing.
 - `UNSAFE_OPERATION`: retry only when the user clearly intends the real write and the command supports confirmation flags.
 - `COLLECTION_OPEN_FAILED`: treat it as a real backend or fixture limitation, not a harmless warning.
+- `AUTH_REQUIRED`: log in first or confirm stored sync credentials exist.
+- `AUTH_INVALID`: stored sync credentials are stale or bad; log in again.
+- `AUTH_STORAGE_UNAVAILABLE`: stop and fix the host secret-storage environment.
+- `PROFILE_NOT_FOUND` and `PROFILE_RESOLUTION_FAILED`: the local Anki profile selection is wrong or unavailable.
+- `BACKUP_RESTORE_UNSAFE`: do not force restore through an unsafe lock/open-state.
+- `SYNC_CONFLICT`: explicit `sync pull` or `sync push` choice is required; do not guess.
+- `SYNC_IN_PROGRESS` and `SYNC_FAILED`: stop, inspect backend details, and do not stack writes on top of unstable sync state.
 
 ## References
 

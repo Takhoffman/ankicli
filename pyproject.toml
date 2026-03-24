@@ -36,6 +36,7 @@ markers = [
   "smoke: fastest confidence gate for local and CI runs",
   "slow: longer-running tests that do not belong in the fast path",
   "backend_python_anki_real: reserved for future real Python-Anki integration coverage",
+  "backend_python_anki_backup_real: opt-in disposable real Python-Anki backup/profile coverage",
   "backend_ankiconnect_real: opt-in live AnkiConnect integration coverage",
 ]
 

@@ -42,6 +42,10 @@ def fixture_collection_path() -> Path:
 
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "backend_python_anki: tests for the python-anki backend")
+    config.addinivalue_line(
+        "markers",
+        "backend_python_anki_backup_real: opt-in disposable real backup/profile checks",
+    )
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

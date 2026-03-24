@@ -13,6 +13,7 @@ rules, and test tiers durable before the full feature set turns green.
   `backend_python_anki_real`.
 - Core V1 read/search/note/card mutation commands are implemented.
 - Diagnostics, collection ops, search ergonomics, and read-only media inspection are implemented.
+- Local profile discovery/resolution and backup flows are implemented for `python-anki`.
 
 ## Quickstart
 
@@ -36,7 +37,11 @@ Inspect a collection:
 
 ```bash
 uv run ankicli --json --collection /path/to/collection.anki2 collection info
+uv run ankicli --json --profile "User 1" collection info
 uv run ankicli --json --collection /path/to/collection.anki2 collection stats
+uv run ankicli --json profile list
+uv run ankicli --json profile default
+uv run ankicli --json profile resolve --name "User 1"
 uv run ankicli --json --collection /path/to/collection.anki2 deck stats --name Default
 uv run ankicli --json --collection /path/to/collection.anki2 deck get --name Default
 uv run ankicli --json --collection /path/to/collection.anki2 model get --name Basic
@@ -61,12 +66,22 @@ uv run ankicli --json --collection /path/to/collection.anki2 note add --deck Def
 uv run ankicli --json --collection /path/to/collection.anki2 note add-tags --id 123 --tag review --dry-run
 uv run ankicli --json --collection /path/to/collection.anki2 note delete --id 123 --dry-run
 uv run ankicli --json --collection /path/to/collection.anki2 card suspend --id 456 --dry-run
+uv run ankicli --json auth status
+uv run ankicli --json --collection /path/to/collection.anki2 sync status
+uv run ankicli --json --profile "User 1" backup status
+uv run ankicli --json --profile "User 1" backup list
+uv run ankicli --json --profile "User 1" backup create
 ```
 
 Current beta defaults:
 
 - Prefer `--json` for scripts and agents.
 - Use `--dry-run` first on write-capable commands.
+- Use `sync status` as the safe preflight before running a real sync.
+- Prefer `--profile` for normal local usage and `--collection` for explicit low-level targeting.
+- Sync is not backup. Use `backup create` or the built-in auto-backup flow when rollback matters.
+- Riskier local `python-anki` writes create an automatic pre-mutation backup unless you pass
+  `--no-auto-backup`.
 - Real `note delete`, `card suspend`, and `card unsuspend` require `--yes`.
 
 ## Development
@@ -90,7 +105,17 @@ uv run pytest tests/integration/test_python_anki_backend.py
 uv run pytest tests/e2e/test_cli_e2e.py
 uv run pytest -m distribution
 uv run pytest -m backend_python_anki_real
+uv run pytest -m backend_python_anki_backup_real
 ```
+
+Disposable real backup tier:
+
+- `backend_python_anki_backup_real` is local-only and uses a temporary Anki2 profile root under
+  `/tmp`.
+- It does not touch a personal profile.
+- It does not require Anki Desktop, AnkiConnect, or AnkiWeb.
+- It does require a real `anki` runtime via `ANKI_SOURCE_PATH`.
+- Shortcut: `make test-backup-real`
 
 Full path:
 
@@ -125,6 +150,7 @@ uv run pytest -m distribution
 - `e2e`: editable-install CLI entrypoint checks through `uv run ankicli ...`
 - `distribution`: built artifact validation from an isolated install target
 - `backend_python_anki_real`: opt-in real `import anki` environment and future collection coverage
+- `backend_python_anki_backup_real`: opt-in disposable real backup/profile round-trip coverage
 - `backend_ankiconnect_real`: opt-in live AnkiConnect integration coverage against a running Anki
   Desktop instance
 
@@ -141,10 +167,26 @@ Currently implemented:
 - `backend info`
 - `backend capabilities`
 - `backend test-connection`
+- `auth status`
+- `auth login`
+- `auth logout`
+- `profile list`
+- `profile get`
+- `profile default`
+- `profile resolve`
+- `backup status`
+- `backup list`
+- `backup create`
+- `backup get`
+- `backup restore`
 - `collection info`
 - `collection stats`
 - `collection validate`
 - `collection lock-status`
+- `sync status`
+- `sync run`
+- `sync pull`
+- `sync push`
 - `deck list`
 - `deck get`
 - `deck stats`
@@ -234,6 +276,22 @@ AnkiConnect currently supports:
 
 AnkiConnect does not support yet:
 
+- `auth status`
+- `auth login`
+- `auth logout`
+- `profile list`
+- `profile get`
+- `profile default`
+- `profile resolve`
+- `backup status`
+- `backup list`
+- `backup create`
+- `backup get`
+- `backup restore`
+- `sync status`
+- `sync run`
+- `sync pull`
+- `sync push`
 - `note delete`
 - `deck create`
 - `deck rename`
@@ -246,6 +304,13 @@ AnkiConnect does not support yet:
 
 Unsupported backend operations now fail with the structured error code
 `BACKEND_OPERATION_UNSUPPORTED`.
+
+Sync/auth notes:
+
+- `python-anki` is the standalone sync/auth backend.
+- `auth login` stores sync credentials in the OS keychain when supported.
+- `sync status` is the intended preflight before `sync run`.
+- `sync pull` and `sync push` are explicit expert flows.
 
 ## CLI Examples
 

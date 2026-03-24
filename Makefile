@@ -1,4 +1,4 @@
-.PHONY: lint build test-fast test-unit test-smoke test-fixture-integration test-e2e test-distribution test-all real-backend-setup ankiconnect-backend-setup
+.PHONY: lint build test-fast test-unit test-smoke test-fixture-integration test-e2e test-distribution test-all test-backup-real real-backend-setup ankiconnect-backend-setup
 
 lint:
 	UV_CACHE_DIR=.uv-cache uv run ruff check .
@@ -27,6 +27,9 @@ test-distribution:
 
 test-all:
 	UV_CACHE_DIR=.uv-cache uv run pytest
+
+test-backup-real:
+	UV_CACHE_DIR=.uv-cache uv run pytest -m backend_python_anki_backup_real
 
 real-backend-setup:
 	UV_CACHE_DIR=.uv-cache uv run python scripts/prepare_real_backend.py

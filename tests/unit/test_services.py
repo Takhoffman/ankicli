@@ -1,19 +1,26 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
+from ankicli.app.credentials import SyncCredential
 from ankicli.app.errors import (
+    AuthRequiredError,
     BackendOperationUnsupportedError,
+    BackupRestoreUnsafeError,
     CollectionRequiredError,
     UnsafeOperationError,
     ValidationError,
 )
 from ankicli.app.models import BackendCapabilities
+from ankicli.app.profiles import ProfileResolver
 from ankicli.app.services import (
+    AuthService,
     BackendService,
+    BackupService,
     CatalogService,
     CollectionService,
     DeckService,
@@ -23,6 +30,7 @@ from ankicli.app.services import (
     MediaService,
     NoteService,
     SearchService,
+    SyncService,
     TagService,
 )
 from ankicli.backends.python_anki import PythonAnkiBackend
@@ -146,6 +154,285 @@ def test_backend_operation_unsupported_is_structured_for_ankiconnect() -> None:
         NoteService(backend).delete(None, note_id=101, dry_run=True, yes=False)
 
     assert excinfo.value.details == monkeypatch_details
+
+
+class _FakeCredentialStore:
+    def __init__(self, credential: SyncCredential | None = None) -> None:
+        self.credential = credential
+        self.writes: list[tuple[str, SyncCredential]] = []
+        self.clears: list[str] = []
+
+    def read(self, *, backend_name: str) -> SyncCredential | None:
+        del backend_name
+        return self.credential
+
+    def write(self, *, backend_name: str, credential: SyncCredential) -> None:
+        self.writes.append((backend_name, credential))
+        self.credential = credential
+
+    def clear(self, *, backend_name: str) -> bool:
+        self.clears.append(backend_name)
+        deleted = self.credential is not None
+        self.credential = None
+        return deleted
+
+
+@pytest.mark.unit
+def test_auth_status_reports_stored_credential(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = PythonAnkiBackend()
+    store = _FakeCredentialStore(SyncCredential(hkey="abc", endpoint="https://sync"))
+    monkeypatch.setattr(
+        backend,
+        "auth_status",
+        lambda path, credential: {
+            "authenticated": credential is not None,
+            "endpoint": credential.endpoint if credential else None,
+        },
+    )
+
+    result = AuthService(backend, credential_store=store).status("/tmp/test.anki2")
+
+    assert result == {"authenticated": True, "endpoint": "https://sync"}
+
+
+@pytest.mark.unit
+def test_auth_login_persists_sync_credential(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = PythonAnkiBackend()
+    store = _FakeCredentialStore()
+    collection_path = "/tmp/test.anki2"
+    monkeypatch.setattr(
+        backend,
+        "login",
+        lambda path, username, password, endpoint: SyncCredential(
+            hkey=f"{username}:{password}",
+            endpoint=endpoint,
+        ),
+    )
+
+    result = AuthService(backend, credential_store=store).login(
+        collection_path,
+        username="user",
+        password="secret",
+        endpoint="https://sync",
+    )
+
+    assert result["authenticated"] is True
+    assert store.writes == [
+        (
+            "python-anki",
+            SyncCredential(hkey="user:secret", endpoint="https://sync"),
+        ),
+    ]
+
+
+@pytest.mark.unit
+def test_auth_logout_deletes_stored_credential(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = PythonAnkiBackend()
+    store = _FakeCredentialStore(SyncCredential(hkey="abc"))
+    monkeypatch.setattr(backend, "logout", lambda path: {"backend": "python-anki"})
+
+    result = AuthService(backend, credential_store=store).logout(None)
+
+    assert result["deleted"] is True
+    assert store.clears == ["python-anki"]
+
+
+@pytest.mark.unit
+def test_sync_status_requires_credentials() -> None:
+    backend = PythonAnkiBackend()
+    store = _FakeCredentialStore()
+
+    with pytest.raises(AuthRequiredError):
+        SyncService(backend, credential_store=store).status("/tmp/test.anki2")
+
+
+@pytest.mark.unit
+def test_sync_run_delegates_with_stored_credential(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = PythonAnkiBackend()
+    store = _FakeCredentialStore(SyncCredential(hkey="abc"))
+    monkeypatch.setattr(
+        backend,
+        "sync_run",
+        lambda path, credential: {
+            "performed": True,
+            "direction": "bidirectional",
+            "hkey": credential.hkey,
+        },
+    )
+
+    result = SyncService(
+        backend,
+        credential_store=store,
+        auto_backup_enabled=False,
+    ).run("/tmp/test.anki2")
+
+    assert result == {
+        "performed": True,
+        "direction": "bidirectional",
+        "hkey": "abc",
+        "auto_backup_created": False,
+        "auto_backup_name": None,
+        "auto_backup_path": None,
+    }
+
+
+@pytest.mark.unit
+def test_backup_list_normalizes_backups(tmp_path: Path) -> None:
+    root = tmp_path / "Anki2"
+    profile_dir = root / "User 1"
+    backup_dir = profile_dir / "backups"
+    backup_dir.mkdir(parents=True)
+    collection_path = profile_dir / "collection.anki2"
+    collection_path.write_text("fixture")
+    backup_path = backup_dir / "backup-2026-03-24-12.00.00.colpkg"
+    backup_path.write_text("backup")
+    backend = PythonAnkiBackend()
+
+    result = BackupService(
+        backend,
+        resolver=ProfileResolver(data_root=root),
+    ).list(str(collection_path))
+
+    assert result["items"][0]["name"] == backup_path.name
+    assert result["items"][0]["kind"] == "anki-native"
+
+
+@pytest.mark.unit
+def test_backup_create_detects_new_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    root = tmp_path / "Anki2"
+    profile_dir = root / "User 1"
+    backup_dir = profile_dir / "backups"
+    backup_dir.mkdir(parents=True)
+    collection_path = profile_dir / "collection.anki2"
+    collection_path.write_text("fixture")
+    backend = PythonAnkiBackend()
+
+    def fake_create_backup(path, *, backup_folder, force):  # noqa: ARG001
+        (backup_folder / "backup-2026-03-24-12.00.00.colpkg").write_text("backup")
+        return {"created": True}
+
+    monkeypatch.setattr(backend, "create_backup", fake_create_backup)
+
+    result = BackupService(
+        backend,
+        resolver=ProfileResolver(data_root=root),
+    ).create(str(collection_path))
+
+    assert result["created"] is True
+    assert result["name"] == "backup-2026-03-24-12.00.00.colpkg"
+
+
+@pytest.mark.unit
+def test_backup_create_detects_overwritten_existing_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "Anki2"
+    profile_dir = root / "User 1"
+    backup_dir = profile_dir / "backups"
+    backup_dir.mkdir(parents=True)
+    collection_path = profile_dir / "collection.anki2"
+    collection_path.write_text("fixture")
+    backup_path = backup_dir / "backup-2026-03-24-12.00.00.colpkg"
+    backup_path.write_text("before")
+    os.utime(backup_path, (1_700_000_000, 1_700_000_000))
+    backend = PythonAnkiBackend()
+
+    def fake_create_backup(path, *, backup_folder, force):  # noqa: ARG001
+        target = backup_folder / "backup-2026-03-24-12.00.00.colpkg"
+        target.write_text("after")
+        os.utime(target, (1_800_000_000, 1_800_000_000))
+        return {"created": True}
+
+    monkeypatch.setattr(backend, "create_backup", fake_create_backup)
+
+    result = BackupService(
+        backend,
+        resolver=ProfileResolver(data_root=root),
+    ).create(str(collection_path))
+
+    assert result["created"] is True
+    assert result["name"] == "backup-2026-03-24-12.00.00.colpkg"
+
+
+@pytest.mark.unit
+def test_backup_restore_blocks_when_lock_detected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "Anki2"
+    profile_dir = root / "User 1"
+    backup_dir = profile_dir / "backups"
+    backup_dir.mkdir(parents=True)
+    collection_path = profile_dir / "collection.anki2"
+    collection_path.write_text("fixture")
+    wal_path = profile_dir / "collection.anki2-wal"
+    wal_path.write_text("lock")
+    backup_path = backup_dir / "backup-2026-03-24-12.00.00.colpkg"
+    backup_path.write_text("backup")
+    backend = PythonAnkiBackend()
+
+    with pytest.raises(BackupRestoreUnsafeError):
+        BackupService(
+            backend,
+            resolver=ProfileResolver(data_root=root),
+        ).restore(str(collection_path), name=backup_path.name, path=None, yes=True)
+
+
+@pytest.mark.unit
+def test_deck_create_includes_auto_backup_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = PythonAnkiBackend()
+    service = DeckService(backend)
+    monkeypatch.setattr(
+        service.backup_service,
+        "auto_backup",
+        lambda path, enabled, dry_run: {
+            "created": True,
+            "name": "b.colpkg",
+            "path": "/tmp/b.colpkg",
+        },
+    )
+    monkeypatch.setattr(
+        backend,
+        "create_deck",
+        lambda path, name, dry_run: {"id": 1, "name": name, "dry_run": dry_run},
+    )
+
+    result = service.create(
+        "/tmp/test.anki2",
+        name="French",
+        dry_run=False,
+        yes=True,
+    )
+
+    assert result["auto_backup_created"] is True
+    assert result["auto_backup_name"] == "b.colpkg"
+
+
+@pytest.mark.unit
+def test_note_delete_skips_auto_backup_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = PythonAnkiBackend()
+    service = NoteService(backend)
+    monkeypatch.setattr(
+        service.backup_service,
+        "auto_backup",
+        lambda path, enabled, dry_run: {"created": enabled, "name": None, "path": None},
+    )
+    monkeypatch.setattr(
+        backend,
+        "delete_note",
+        lambda path, note_id, dry_run: {"id": note_id, "dry_run": dry_run},
+    )
+
+    result = service.delete(
+        "/tmp/test.anki2",
+        note_id=101,
+        dry_run=False,
+        yes=True,
+        auto_backup_enabled=False,
+    )
+
+    assert result["auto_backup_created"] is False
 
 
 @pytest.mark.unit

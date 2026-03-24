@@ -32,6 +32,33 @@ export const toolSpecs = [
       `Fetched collection info (backend_available=${String(data.backend_available ?? "unknown")}).`,
   },
   {
+    name: "anki_auth_status",
+    label: "Anki Auth Status",
+    description: "Report whether sync credentials are available through ankicli.",
+    parameters: emptySchema,
+    buildArgs: () => ["auth", "status"],
+    summarize: (data) =>
+      `Auth status fetched (authenticated=${String(data.authenticated ?? false)}).`,
+  },
+  {
+    name: "anki_sync_status",
+    label: "Anki Sync Status",
+    description: "Check whether the configured collection requires sync through ankicli.",
+    parameters: emptySchema,
+    buildArgs: () => ["sync", "status"],
+    summarize: (data) =>
+      `Sync status fetched (required=${String(data.required ?? "unknown")}).`,
+  },
+  {
+    name: "anki_sync_run",
+    label: "Anki Sync Run",
+    description: "Run the normal collection sync flow through ankicli.",
+    parameters: emptySchema,
+    buildArgs: () => ["sync", "run"],
+    summarize: (data) =>
+      `Sync run completed (performed=${String(data.performed ?? false)}).`,
+  },
+  {
     name: "anki_deck_list",
     label: "Anki Deck List",
     description: "List decks in the configured collection through ankicli.",
