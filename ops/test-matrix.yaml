@@ -1,5 +1,5 @@
 version: 1
-phase: phase3
+phase: phase2
 
 proof_sets:
   read_basic: &read_basic [unit, cli_contract, failure]

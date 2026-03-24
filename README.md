@@ -95,8 +95,8 @@ uv sync --extra dev --frozen
 Fast path:
 
 ```bash
-uv run pytest -m "unit or smoke"
-uv run python scripts/audit_quality_matrix.py
+uv run pytest -m "unit or smoke" --proof-report /tmp/ankicli-proof-report.json
+uv run python scripts/audit_quality_matrix.py --proof-report /tmp/ankicli-proof-report.json
 ```
 
 Targeted suites:
@@ -107,7 +107,7 @@ uv run pytest tests/e2e/test_cli_e2e.py
 uv run pytest -m distribution
 uv run pytest -m backend_python_anki_real
 uv run pytest -m backend_python_anki_backup_real
-uv run python scripts/audit_quality_matrix.py --markdown
+uv run python scripts/audit_quality_matrix.py --proof-report /tmp/ankicli-proof-report.json --markdown
 ```
 
 Disposable real backup tier:
@@ -140,9 +140,9 @@ make test-matrix
 The unified quality matrix is the primary proof audit:
 
 - `ops/test-matrix.yaml` is the command-level proof policy
-- `scripts/audit_quality_matrix.py` checks matrix rows, proof annotations, and missing proof
-- the default matrix phase is `phase1`, which reports proof gaps but fails only on malformed or
-  stale matrix/annotation state
+- `scripts/audit_quality_matrix.py` checks matrix rows, collectable proof annotations, and executed proof from a pytest `--proof-report` JSON artifact
+- the default matrix phase is `phase2`
+- `phase3` should only be used when the required real-backend proof tiers are actually executed
 
 Build:
 

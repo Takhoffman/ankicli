@@ -1,5 +1,7 @@
 .PHONY: lint build test-fast test-unit test-smoke test-fixture-integration test-e2e test-distribution test-all test-backup-real test-matrix real-backend-setup ankiconnect-backend-setup
 
+PROOF_REPORT ?= /tmp/ankicli-proof-report.json
+
 lint:
 	UV_CACHE_DIR=.uv-cache uv run ruff check .
 
@@ -7,7 +9,7 @@ build:
 	UV_CACHE_DIR=.uv-cache uv build
 
 test-fast:
-	UV_CACHE_DIR=.uv-cache uv run pytest -m "unit or smoke"
+	UV_CACHE_DIR=.uv-cache uv run pytest -m "unit or smoke" --proof-report $(PROOF_REPORT)
 
 test-unit:
 	UV_CACHE_DIR=.uv-cache uv run pytest -m unit
@@ -32,7 +34,8 @@ test-backup-real:
 	UV_CACHE_DIR=.uv-cache uv run pytest -m backend_python_anki_backup_real
 
 test-matrix:
-	UV_CACHE_DIR=.uv-cache uv run python scripts/audit_quality_matrix.py
+	UV_CACHE_DIR=.uv-cache uv run pytest -m "unit or smoke" --proof-report $(PROOF_REPORT)
+	UV_CACHE_DIR=.uv-cache uv run python scripts/audit_quality_matrix.py --proof-report $(PROOF_REPORT)
 
 real-backend-setup:
 	UV_CACHE_DIR=.uv-cache uv run python scripts/prepare_real_backend.py

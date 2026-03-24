@@ -46,12 +46,14 @@ service layer, JSON-first responses, and a backend seam present from day one.
 - `ops/test-matrix.yaml` is the source of truth for required proof by command
 - `scripts/audit_quality_matrix.py` is the primary unified auditor
 - test proof is attached explicitly with `@proves("command.id", "proof_type", ...)`
+- proof satisfaction comes from pytest-collected and pytest-passed tests via the proof report, not from source annotations alone
 - backend capability reporting remains a sibling signal, not a required proof type
 - raw line/branch coverage remains supplemental and is not the primary adequacy gate
-- rollout starts at `phase1`:
+- default enforcement is `phase2`:
   - fail on malformed matrix state
-  - fail on stale matrix rows or stale proof annotations
-  - report missing proofs without blocking
+  - fail on stale matrix rows, stale proof annotations, or non-collected proof annotations
+  - fail when required `unit` or `cli_contract` proof is not satisfied by passed pytest items
+- `phase3` is reserved for environments that actually execute the required real-backend proof tiers
 
 ## Development Policy
 

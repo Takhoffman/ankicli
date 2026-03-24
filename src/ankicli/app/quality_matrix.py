@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -119,6 +120,15 @@ class ProofAnnotation:
     test_name: str
 
 
+@dataclass(frozen=True, slots=True)
+class CollectedProof:
+    nodeid: str
+    command: str
+    proofs: tuple[str, ...]
+    file: str
+    test_name: str
+
+
 def implemented_commands() -> list[str]:
     commands: list[str] = []
     for group in app.registered_groups:
@@ -219,14 +229,33 @@ def _constant_string(node: ast.AST) -> str:
     return node.value
 
 
+def _iter_collectable_test_nodes(
+    module: ast.Module,
+) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+    nodes: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+    for node in module.body:
+        if isinstance(
+            node,
+            ast.FunctionDef | ast.AsyncFunctionDef,
+        ) and node.name.startswith("test_"):
+            nodes.append(node)
+            continue
+        if isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+            for child in node.body:
+                if isinstance(
+                    child,
+                    ast.FunctionDef | ast.AsyncFunctionDef,
+                ) and child.name.startswith("test_"):
+                    nodes.append(child)
+    return nodes
+
+
 def collect_proofs(tests_root: Path) -> tuple[list[ProofAnnotation], list[str]]:
     annotations: list[ProofAnnotation] = []
     errors: list[str] = []
     for path in sorted(tests_root.rglob("test_*.py")):
         module = ast.parse(path.read_text(), filename=str(path))
-        for node in ast.walk(module):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
+        for node in _iter_collectable_test_nodes(module):
             for decorator in node.decorator_list:
                 if not isinstance(decorator, ast.Call):
                     continue
@@ -258,10 +287,69 @@ def collect_proofs(tests_root: Path) -> tuple[list[ProofAnnotation], list[str]]:
     return annotations, errors
 
 
+def load_proof_report(
+    path: Path,
+) -> tuple[list[CollectedProof], set[str], set[tuple[str, str]], list[str]]:
+    try:
+        raw = json.loads(path.read_text())
+    except FileNotFoundError:
+        return [], set(), set(), [f"{path}: proof report not found"]
+    except json.JSONDecodeError as exc:
+        return [], set(), set(), [f"{path}: invalid proof report JSON: {exc}"]
+    rows: list[CollectedProof] = []
+    errors: list[str] = []
+    for item in raw.get("collected_proofs", []):
+        try:
+            nodeid = item["nodeid"]
+            command = item["command"]
+            file = item["file"]
+            test_name = item["test_name"]
+            proofs = _normalize_proofs(
+                list(item.get("proofs", [])),
+                field_name="proofs",
+                command=command,
+            )
+            if not all(
+                isinstance(value, str) and value
+                for value in (nodeid, command, file, test_name)
+            ):
+                raise ValueError("collected proof rows require non-empty string fields")
+        except (KeyError, TypeError, ValueError) as exc:
+            errors.append(f"{path}: invalid proof report row: {exc}")
+            continue
+        rows.append(
+            CollectedProof(
+                nodeid=nodeid,
+                command=command,
+                proofs=proofs,
+                file=str(Path(file).resolve()),
+                test_name=test_name,
+            ),
+        )
+    collected_tests: set[tuple[str, str]] = set()
+    for item in raw.get("collected_tests", []):
+        try:
+            file = item["file"]
+            test_name = item["test_name"]
+            if not all(isinstance(value, str) and value for value in (file, test_name)):
+                raise ValueError("collected test rows require non-empty string fields")
+        except (KeyError, TypeError, ValueError) as exc:
+            errors.append(f"{path}: invalid collected test row: {exc}")
+            continue
+        collected_tests.add((str(Path(file).resolve()), test_name))
+    passed_nodeids = {
+        nodeid
+        for nodeid in raw.get("passed_nodeids", [])
+        if isinstance(nodeid, str) and nodeid
+    }
+    return rows, passed_nodeids, collected_tests, errors
+
+
 def build_report(
     *,
     matrix_path: Path,
     tests_root: Path,
+    proof_report_path: Path | None = None,
     phase_override: str | None = None,
 ) -> dict[str, Any]:
     phase, entries = load_matrix(matrix_path)
@@ -274,6 +362,15 @@ def build_report(
     annotations, annotation_errors = collect_proofs(tests_root)
     proofs_by_command: dict[str, set[str]] = {}
     stale_annotations: list[dict[str, str]] = []
+    collected_proofs: list[CollectedProof] = []
+    passed_nodeids: set[str] = set()
+    collected_tests: set[tuple[str, str]] = set()
+    if proof_report_path is not None:
+        collected_proofs, passed_nodeids, collected_tests, report_errors = load_proof_report(
+            proof_report_path,
+        )
+        annotation_errors.extend(report_errors)
+
     for annotation in annotations:
         if annotation.command not in commands:
             stale_annotations.append(
@@ -284,7 +381,25 @@ def build_report(
                 },
             )
             continue
-        proofs_by_command.setdefault(annotation.command, set()).update(annotation.proofs)
+        if proof_report_path is not None:
+            test_key = (str(Path(annotation.file).resolve()), annotation.test_name)
+            if test_key not in collected_tests:
+                annotation_errors.append(
+                    "non-collected proof annotation: "
+                    f"{annotation.command} in {annotation.file}::{annotation.test_name}",
+                )
+    for row in collected_proofs:
+        if row.command not in commands:
+            stale_annotations.append(
+                {
+                    "command": row.command,
+                    "file": row.file,
+                    "test_name": row.test_name,
+                },
+            )
+            continue
+        if row.nodeid in passed_nodeids:
+            proofs_by_command.setdefault(row.command, set()).update(row.proofs)
 
     matrix_missing = sorted(command for command in commands if command not in entries)
     stale_rows = sorted(command for command in entries if command not in commands)
@@ -318,6 +433,8 @@ def build_report(
             for item in stale_annotations
         )
     if phase in {"phase2", "phase3"}:
+        if proof_report_path is None:
+            phase_failures.append("proof report path is required for phase2/phase3 enforcement")
         phase_failures.extend(f"missing matrix row: {command}" for command in matrix_missing)
         for command, missing in sorted(missing_required.items()):
             core_missing = [item for item in missing if item in {"unit", "cli_contract"}]

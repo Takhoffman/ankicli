@@ -7,6 +7,8 @@ from ankicli.app.quality_matrix import PROOF_TYPES
 
 F = TypeVar("F", bound=Callable)
 
+PROOF_ATTR = "__ankicli_proofs__"
+
 
 def proves(command: str, *proofs: str):
     if not isinstance(command, str) or not command:
@@ -18,6 +20,9 @@ def proves(command: str, *proofs: str):
         raise ValueError(f"Unknown proof types for {command}: {', '.join(invalid)}")
 
     def decorator(func: F) -> F:
+        existing = list(getattr(func, PROOF_ATTR, ()))
+        existing.append((command, tuple(proofs)))
+        setattr(func, PROOF_ATTR, tuple(existing))
         return func
 
     return decorator

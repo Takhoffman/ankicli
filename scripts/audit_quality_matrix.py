@@ -29,6 +29,10 @@ def parse_args() -> argparse.Namespace:
         default="tests",
         help="Path to the tests root to scan for proof annotations.",
     )
+    parser.add_argument(
+        "--proof-report",
+        help="Path to a pytest-generated proof execution report.",
+    )
     return parser.parse_args()
 
 
@@ -37,6 +41,7 @@ def main() -> int:
     report = build_report(
         matrix_path=Path(args.matrix).resolve(),
         tests_root=Path(args.tests_root).resolve(),
+        proof_report_path=Path(args.proof_report).resolve() if args.proof_report else None,
         phase_override=args.phase,
     )
     if args.json:
