@@ -30,7 +30,56 @@ class CollectionRequiredError(AnkiCliError):
     exit_code = 4
 
 
-class NotImplementedYetError(AnkiCliError):
-    code = "NOT_IMPLEMENTED_YET"
+class CollectionNotFoundError(AnkiCliError):
+    code = "COLLECTION_NOT_FOUND"
+    exit_code = 5
+
+
+class CollectionOpenError(AnkiCliError):
+    code = "COLLECTION_OPEN_FAILED"
+    exit_code = 6
+
+
+class NoteNotFoundError(AnkiCliError):
+    code = "NOTE_NOT_FOUND"
+    exit_code = 7
+
+
+class CardNotFoundError(AnkiCliError):
+    code = "CARD_NOT_FOUND"
+    exit_code = 8
+
+
+class DeckNotFoundError(AnkiCliError):
+    code = "DECK_NOT_FOUND"
+    exit_code = 9
+
+
+class ModelNotFoundError(AnkiCliError):
+    code = "MODEL_NOT_FOUND"
     exit_code = 10
 
+
+class NotImplementedYetError(AnkiCliError):
+    code = "NOT_IMPLEMENTED_YET"
+    exit_code = 11
+
+
+class UnsafeOperationError(AnkiCliError):
+    code = "UNSAFE_OPERATION"
+    exit_code = 12
+
+
+class TagNotFoundError(AnkiCliError):
+    code = "TAG_NOT_FOUND"
+    exit_code = 13
+
+
+class BackendOperationUnsupportedError(AnkiCliError):
+    code = "BACKEND_OPERATION_UNSUPPORTED"
+    exit_code = 14
+
+
+class MediaNotFoundError(AnkiCliError):
+    code = "MEDIA_NOT_FOUND"
+    exit_code = 15

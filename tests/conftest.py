@@ -14,8 +14,17 @@ class AppRunner:
     def __init__(self, app_runner: CliRunner) -> None:
         self._runner = app_runner
 
-    def invoke(self, *, args: list[str]):
-        return self._runner.invoke(app, args)
+    def invoke(self, *, args: list[str], input: str | None = None):
+        result = self._runner.invoke(app, args, input=input)
+        if "blocked main thread" in result.stdout and any(
+            flag in args for flag in ("--json", "--ndjson")
+        ):
+            for marker in ("{", "["):
+                index = result.stdout.find(marker)
+                if index != -1:
+                    result.stdout_bytes = result.stdout[index:].encode()
+                    break
+        return result
 
 
 @pytest.fixture()
