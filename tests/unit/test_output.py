@@ -5,7 +5,13 @@ import json
 import pytest
 
 from ankicli.app.errors import ValidationError
-from ankicli.app.output import error_envelope, render_human, render_json, success_envelope
+from ankicli.app.output import (
+    error_envelope,
+    render_human,
+    render_json,
+    render_ndjson,
+    success_envelope,
+)
 
 
 @pytest.mark.unit
@@ -28,3 +34,12 @@ def test_error_envelope_renders_human_message() -> None:
 
     assert render_human(envelope) == "VALIDATION_ERROR: bad input"
 
+
+@pytest.mark.unit
+def test_render_ndjson_outputs_one_json_object_per_line() -> None:
+    text = render_ndjson([{"id": 1, "name": "a"}, {"id": 2, "name": "b"}])
+
+    assert text.splitlines() == [
+        '{"id": 1, "name": "a"}',
+        '{"id": 2, "name": "b"}',
+    ]

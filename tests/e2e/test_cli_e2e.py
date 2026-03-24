@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from ankicli import __version__
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -47,3 +49,60 @@ def test_installed_entrypoint_help_e2e() -> None:
 
     assert result.returncode == 0
     assert "collection" in result.stdout
+
+
+@pytest.mark.e2e
+def test_installed_entrypoint_version_e2e() -> None:
+    result = run_cli("--version")
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == __version__
+
+
+@pytest.mark.e2e
+def test_export_notes_missing_collection_e2e() -> None:
+    result = run_cli("--json", "export", "notes", "--query", "")
+
+    assert result.returncode == 4
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "COLLECTION_REQUIRED"
+
+
+@pytest.mark.e2e
+def test_export_cards_missing_collection_e2e() -> None:
+    result = run_cli("--json", "export", "cards", "--query", "")
+
+    assert result.returncode == 4
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "COLLECTION_REQUIRED"
+
+
+@pytest.mark.e2e
+def test_import_patch_missing_collection_e2e(tmp_path: Path) -> None:
+    input_path = tmp_path / "patches.json"
+    input_path.write_text("[]")
+
+    result = run_cli("--json", "import", "patch", "--input", str(input_path), "--dry-run")
+
+    assert result.returncode == 4
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "COLLECTION_REQUIRED"
+
+
+@pytest.mark.e2e
+def test_import_notes_stdin_missing_collection_e2e() -> None:
+    env = os.environ.copy()
+    env["UV_CACHE_DIR"] = str(PROJECT_ROOT / ".uv-cache")
+    result = subprocess.run(
+        ["uv", "run", "ankicli", "--json", "import", "notes", "--stdin-json", "--dry-run"],
+        capture_output=True,
+        text=True,
+        input='{"items":[]}',
+        env=env,
+        check=False,
+        cwd=PROJECT_ROOT,
+    )
+
+    assert result.returncode == 4
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "COLLECTION_REQUIRED"

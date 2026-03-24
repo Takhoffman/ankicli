@@ -55,3 +55,7 @@ def test_built_wheel_installs_and_exposes_cli() -> None:
         help_result = _run([str(cli_bin), "--help"])
         assert help_result.returncode == 0, help_result.stderr
         assert "collection" in help_result.stdout
+
+        version_result = _run([str(cli_bin), "--version"])
+        assert version_result.returncode == 0, version_result.stderr
+        assert version_result.stdout.strip()

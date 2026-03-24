@@ -31,6 +31,10 @@ def render_json(envelope: Envelope) -> str:
     return envelope.model_dump_json(indent=2)
 
 
+def render_ndjson(items: list[dict[str, Any]]) -> str:
+    return "\n".join(json.dumps(item, sort_keys=True) for item in items)
+
+
 def render_human(envelope: Envelope) -> str:
     if envelope.ok:
         if not envelope.data:

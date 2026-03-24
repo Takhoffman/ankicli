@@ -20,7 +20,7 @@ def test_backend_list_smoke(runner) -> None:
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
-    assert payload["data"]["items"] == ["python-anki"]
+    assert payload["data"]["items"] == ["python-anki", "ankiconnect"]
 
 
 @pytest.mark.smoke
@@ -32,3 +32,12 @@ def test_backend_info_smoke(runner) -> None:
     assert payload["data"]["name"] == "python-anki"
     assert "capabilities" in payload["data"]
 
+
+@pytest.mark.smoke
+def test_ankiconnect_backend_info_smoke(runner) -> None:
+    result = runner.invoke(args=["--json", "--backend", "ankiconnect", "backend", "info"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["data"]["name"] == "ankiconnect"
+    assert "capabilities" in payload["data"]

@@ -57,6 +57,13 @@ uv build
 uv run pytest -m distribution
 ```
 
+Real python-anki setup check:
+
+```bash
+export ANKI_SOURCE_PATH=/absolute/path/to/anki
+uv run pytest -m backend_python_anki_real -k anki_source_path_enables_import
+```
+
 Full tests:
 
 ```bash
@@ -82,7 +89,8 @@ uv build
 - `fixture_integration`: deterministic SQLite fixture and contract-level command coverage
 - `e2e`: editable-install CLI entrypoint checks through `uv run`
 - `distribution`: built artifact install and entrypoint validation in an isolated environment
-- `backend_python_anki_real`: future true `import anki` integration coverage
+- `backend_python_anki_real`: opt-in local source setup checks and future true `import anki`
+  integration coverage
 
 Preferred loops:
 
@@ -91,6 +99,9 @@ uv run pytest -m "unit or smoke"
 uv run pytest tests/integration/test_python_anki_backend.py
 uv run pytest tests/e2e/test_cli_e2e.py
 uv build && uv run pytest -m distribution
+export ANKI_SOURCE_PATH=/absolute/path/to/anki && uv run pytest -m backend_python_anki_real -k anki_source_path_enables_import
+uv run python scripts/prepare_real_backend.py --reset
+uv run python scripts/prepare_ankiconnect_backend.py
 ```
 
 ## Safety
@@ -101,6 +112,9 @@ uv build && uv run pytest -m distribution
   do not hide it behind generic crashes.
 - E2E should exercise the editable installed CLI entrypoint, not `python -m ...` shortcuts.
 - Distribution validation should cover built artifacts separately from editable-entrypoint e2e.
+- `ANKI_SOURCE_PATH` is the only supported local source override for real `python-anki` work.
+- A raw upstream checkout currently proves import-path setup only unless that checkout has already
+  generated the required Python build artifacts.
 
 ## Fixture Policy
 
@@ -110,12 +124,19 @@ uv build && uv run pytest -m distribution
 - That default fixture is a contract fixture, not yet a true Anki collection fixture.
 - If a fixture format changes, update the generator and document the change in
   `tests/fixtures/README.md`.
+- Real backend work should use a separate local Anki source checkout, not mutate the contract
+  fixture assumptions.
+- For true collection-level validation, prefer an installed official `anki` wheel or a built
+  upstream checkout over an unbuilt raw source tree.
 
 ## Confidence Model
 
 - Do not describe `fixture_integration` as proof of real Anki behavior.
+- Keep `fixture_integration` resilient in mixed local environments, including when an official
+  `anki` wheel is installed for real-backend work.
 - Do not describe `e2e` as proof that built wheels or sdists install correctly.
 - Reserve “real backend integration” for tests that actually open collections through `import anki`.
+- Treat `backend_python_anki_real` as opt-in and local unless CI is explicitly expanded later.
 
 ## Release And Packaging
 
@@ -123,3 +144,26 @@ uv build && uv run pytest -m distribution
 - `uv` is the workflow frontend; `hatchling` is the build backend configured in `pyproject.toml`.
 - Packaging regressions should be caught by the `distribution` suite or dedicated build checks, not
   discovered manually.
+
+## Real Anki Source Setup
+
+- Use a sibling checkout of upstream [ankitects/anki](https://github.com/ankitects/anki).
+- Pin local setup docs to tag `25.09.2` until deliberately updated.
+- Set `ANKI_SOURCE_PATH` to that checkout root.
+- Import-path verification:
+
+```bash
+UV_CACHE_DIR=.uv-cache uv run python -c "from ankicli.runtime import configure_anki_source_path; import importlib.util; configure_anki_source_path(); print(importlib.util.find_spec('anki') is not None)"
+```
+
+- For real `Collection`-level validation, use one of:
+  - official `anki==25.9.2` installed into the project environment, or
+  - an upstream checkout that has been built far enough to provide generated Python artifacts
+- A raw upstream source checkout may fail at `Collection` import/use time due to missing generated
+  modules such as protobuf outputs.
+- Set `ANKICLI_REAL_COLLECTION` only when you want the real-backend suite to run `collection info`
+  against an actual collection.
+- Use `uv run python scripts/prepare_real_backend.py --reset` to automate the wheel-backed local
+  validation path and emit the required env vars.
+- Use `uv run python scripts/prepare_ankiconnect_backend.py` to probe a live AnkiConnect instance
+  and emit the env vars for `backend_ankiconnect_real`.
