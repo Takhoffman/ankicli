@@ -54,6 +54,11 @@ PROOF_EXECUTION_HINTS = {
         "tier": "fixture integration",
     },
 }
+COMMAND_PROOF_EXECUTION_HINTS = {
+    ("sync.run", "safety"): PROOF_EXECUTION_HINTS["real_python_anki"],
+    ("sync.pull", "safety"): PROOF_EXECUTION_HINTS["real_python_anki"],
+    ("sync.push", "safety"): PROOF_EXECUTION_HINTS["real_python_anki"],
+}
 
 COMMAND_TO_OPERATION = {
     "doctor.backend": "doctor.backend",
@@ -163,6 +168,10 @@ def implemented_commands() -> list[str]:
         for command in group.typer_instance.registered_commands:
             commands.append(f"{group.name}.{command.name}")
     return sorted(commands)
+
+
+def _execution_hint_for(command: str, proof: str) -> dict[str, Any]:
+    return COMMAND_PROOF_EXECUTION_HINTS.get((command, proof), PROOF_EXECUTION_HINTS.get(proof, {}))
 
 
 def summarize_backend_support(commands: list[str]) -> dict[str, dict[str, bool]]:
@@ -478,25 +487,26 @@ def build_report(
     for command, missing in missing_required.items():
         for proof in missing:
             phase3_blocking_commands_by_proof.setdefault(proof, []).append(command)
-    execution_plan_groups: dict[tuple[str | None, str | None], dict[str, Any]] = {}
-    for proof in sorted(phase3_blocking_commands_by_proof):
-        hint = PROOF_EXECUTION_HINTS.get(proof, {})
-        runner = hint.get("runner")
-        tier = hint.get("tier")
-        requires_env = tuple(sorted(hint.get("requires_env", [])))
-        key = (tier, runner, requires_env)
-        group = execution_plan_groups.setdefault(
-            key,
-            {
-                "tier": tier,
-                "runner": runner,
-                "requires_env": list(requires_env),
-                "proofs": [],
-                "blocking_commands": set(),
-            },
-        )
-        group["proofs"].append(proof)
-        group["blocking_commands"].update(phase3_blocking_commands_by_proof[proof])
+    execution_plan_groups: dict[tuple[str | None, str | None, tuple[str, ...]], dict[str, Any]] = {}
+    for command, missing in sorted(missing_required.items()):
+        for proof in sorted(missing):
+            hint = _execution_hint_for(command, proof)
+            runner = hint.get("runner")
+            tier = hint.get("tier")
+            requires_env = tuple(sorted(hint.get("requires_env", [])))
+            key = (tier, runner, requires_env)
+            group = execution_plan_groups.setdefault(
+                key,
+                {
+                    "tier": tier,
+                    "runner": runner,
+                    "requires_env": list(requires_env),
+                    "proofs": set(),
+                    "blocking_commands": set(),
+                },
+            )
+            group["proofs"].add(proof)
+            group["blocking_commands"].add(command)
     execution_plan = [
         {
             "tier": item["tier"],

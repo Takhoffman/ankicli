@@ -1186,6 +1186,7 @@ def import_notes(
             stdin_json=stdin_json,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -1213,6 +1214,7 @@ def import_patch(
             stdin_json=stdin_json,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -1341,6 +1343,7 @@ def note_add_tags(
             tags=tag or [],
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -1368,6 +1371,7 @@ def note_remove_tags(
             tags=tag or [],
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -1395,6 +1399,7 @@ def note_move_deck(
             deck_name=deck,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -1435,6 +1440,7 @@ def card_suspend(
             card_id=card_id,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)
@@ -1460,6 +1466,7 @@ def card_unsuspend(
             card_id=card_id,
             dry_run=dry_run,
             yes=yes,
+            auto_backup_enabled=not settings.no_auto_backup,
         )
     except AnkiCliError as error:
         emit(settings, error=error)

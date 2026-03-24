@@ -536,8 +536,26 @@ def test_note_move_deck_dry_run_shared_shape_parity(
         yes=False,
     )
 
-    assert set(python_result) == {"id", "deck", "card_ids", "action", "dry_run"}
-    assert set(ankiconnect_result) == {"id", "deck", "card_ids", "action", "dry_run"}
+    assert set(python_result) == {
+        "id",
+        "deck",
+        "card_ids",
+        "action",
+        "dry_run",
+        "auto_backup_created",
+        "auto_backup_name",
+        "auto_backup_path",
+    }
+    assert set(ankiconnect_result) == {
+        "id",
+        "deck",
+        "card_ids",
+        "action",
+        "dry_run",
+        "auto_backup_created",
+        "auto_backup_name",
+        "auto_backup_path",
+    }
 
 
 @pytest.mark.unit
@@ -631,8 +649,24 @@ def test_import_notes_stdin_dry_run_shared_shape_parity(
         yes=False,
     )
 
-    assert set(python_result) == {"items", "count", "dry_run", "source"}
-    assert set(ankiconnect_result) == {"items", "count", "dry_run", "source"}
+    assert set(python_result) == {
+        "items",
+        "count",
+        "dry_run",
+        "source",
+        "auto_backup_created",
+        "auto_backup_name",
+        "auto_backup_path",
+    }
+    assert set(ankiconnect_result) == {
+        "items",
+        "count",
+        "dry_run",
+        "source",
+        "auto_backup_created",
+        "auto_backup_name",
+        "auto_backup_path",
+    }
 
 
 @pytest.mark.unit
@@ -667,8 +701,24 @@ def test_import_patch_stdin_dry_run_shared_shape_parity(
         yes=False,
     )
 
-    assert set(python_result) == {"items", "count", "dry_run", "source"}
-    assert set(ankiconnect_result) == {"items", "count", "dry_run", "source"}
+    assert set(python_result) == {
+        "items",
+        "count",
+        "dry_run",
+        "source",
+        "auto_backup_created",
+        "auto_backup_name",
+        "auto_backup_path",
+    }
+    assert set(ankiconnect_result) == {
+        "items",
+        "count",
+        "dry_run",
+        "source",
+        "auto_backup_created",
+        "auto_backup_name",
+        "auto_backup_path",
+    }
 
 
 @pytest.mark.unit

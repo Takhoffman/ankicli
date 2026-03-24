@@ -871,6 +871,145 @@ def test_build_report_marks_env_gated_execution_plan_steps(
     ]
 
 
+def test_build_report_uses_command_aware_execution_hints_for_safety(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ANKI_SOURCE_PATH", raising=False)
+    monkeypatch.setattr(
+        "ankicli.app.quality_matrix.implemented_commands",
+        lambda: ["note.delete", "sync.run"],
+    )
+    monkeypatch.setattr(
+        "ankicli.app.quality_matrix.summarize_backend_support",
+        lambda commands: {
+            "python-anki": {command: True for command in commands},
+            "ankiconnect": {command: False for command in commands},
+        },
+    )
+    tests_root = tmp_path / "tests"
+    tests_root.mkdir()
+    path = tests_root / "test_example.py"
+    path.write_text(
+        textwrap.dedent(
+            """
+            from tests.proof import proves
+
+            @proves("note.delete", "unit", "cli_contract")
+            def test_note_delete():
+                assert True
+
+            @proves("sync.run", "unit", "cli_contract")
+            def test_sync_run():
+                assert True
+            """,
+        ).strip()
+        + "\n",
+    )
+    proof_report = _write_proof_report(
+        tmp_path,
+        f"""
+        {{
+          "collected_proofs": [
+            {{
+              "nodeid": "tests/test_example.py::test_note_delete",
+              "file": "{path.resolve()}",
+              "test_name": "test_note_delete",
+              "command": "note.delete",
+              "proofs": ["unit", "cli_contract"]
+            }},
+            {{
+              "nodeid": "tests/test_example.py::test_sync_run",
+              "file": "{path.resolve()}",
+              "test_name": "test_sync_run",
+              "command": "sync.run",
+              "proofs": ["unit", "cli_contract"]
+            }}
+          ],
+          "collected_tests": [
+            {{
+              "file": "{path.resolve()}",
+              "test_name": "test_note_delete"
+            }},
+            {{
+              "file": "{path.resolve()}",
+              "test_name": "test_sync_run"
+            }}
+          ],
+          "passed_nodeids": [
+            "tests/test_example.py::test_note_delete",
+            "tests/test_example.py::test_sync_run"
+          ]
+        }}
+        """,
+    )
+    matrix_path = _write_matrix(
+        tmp_path,
+        """
+        phase: phase1
+        commands:
+          - command: note.delete
+            backend_scope: python-anki
+            risk: destructive
+            required_proofs: [unit, cli_contract, safety]
+            not_applicable_proofs: []
+          - command: sync.run
+            backend_scope: python-anki
+            risk: sync
+            required_proofs: [unit, cli_contract, safety]
+            not_applicable_proofs: []
+        """,
+    )
+
+    report = build_report(
+        matrix_path=matrix_path,
+        tests_root=tests_root,
+        proof_report_paths=[proof_report],
+    )
+
+    assert report["phase3_readiness"]["best_next_action"] == {
+        "blocking_command_count": 1,
+        "commands": ["note.delete"],
+        "missing_env": [],
+        "proofs": ["safety"],
+        "requires_env": [],
+        "runner": (
+            "PYTEST_PLUGINS=ankicli.pytest_plugin uv run pytest -c pyproject.toml "
+            "tests/integration/test_python_anki_backend.py --proof-report /tmp/fixture.json"
+        ),
+        "runnable": True,
+        "tier": "fixture integration",
+    }
+    assert report["phase3_readiness"]["execution_plan"] == [
+        {
+            "blocking_command_count": 1,
+            "commands": ["note.delete"],
+            "missing_env": [],
+            "proofs": ["safety"],
+            "requires_env": [],
+            "runner": (
+                "PYTEST_PLUGINS=ankicli.pytest_plugin uv run pytest -c pyproject.toml "
+                "tests/integration/test_python_anki_backend.py --proof-report /tmp/fixture.json"
+            ),
+            "runnable": True,
+            "tier": "fixture integration",
+        },
+        {
+            "blocking_command_count": 1,
+            "commands": ["sync.run"],
+            "missing_env": ["ANKI_SOURCE_PATH"],
+            "proofs": ["safety"],
+            "requires_env": ["ANKI_SOURCE_PATH"],
+            "runner": (
+                "PYTEST_PLUGINS=ankicli.pytest_plugin uv run pytest -c pyproject.toml "
+                "-m backend_python_anki_backup_real --proof-report /tmp/real-python-anki.json"
+            ),
+            "runnable": False,
+            "tier": "real python-anki backup",
+        },
+    ]
+
+
 def test_build_report_handles_missing_proof_report_as_audit_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

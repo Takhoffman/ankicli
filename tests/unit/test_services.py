@@ -21,6 +21,7 @@ from ankicli.app.services import (
     AuthService,
     BackendService,
     BackupService,
+    CardService,
     CatalogService,
     CollectionService,
     DeckService,
@@ -310,6 +311,80 @@ def test_sync_run_delegates_with_stored_credential(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.unit
+@proves("sync.run", "unit", "failure")
+def test_sync_run_requires_credentials_before_auto_backup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = PythonAnkiBackend()
+    store = _FakeCredentialStore()
+    calls: list[str] = []
+    monkeypatch.setattr(
+        backend,
+        "backend_capabilities",
+        lambda: BackendCapabilities(
+            backend="python-anki",
+            available=True,
+            supports_collection_reads=True,
+            supports_collection_writes=True,
+            supports_live_desktop=False,
+            supported_operations={"sync.run": True},
+        ),
+    )
+    service = SyncService(backend, credential_store=store)
+    monkeypatch.setattr(
+        service.backup_service,
+        "auto_backup",
+        lambda path, enabled, dry_run: calls.append(str(path))
+        or {"created": True, "name": "b", "path": "/tmp/b"},
+    )
+
+    with pytest.raises(AuthRequiredError):
+        service.run("/tmp/test.anki2")
+
+    assert calls == []
+
+
+@pytest.mark.unit
+@proves("sync.status", "unit")
+def test_sync_status_persists_rotated_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = PythonAnkiBackend()
+    store = _FakeCredentialStore(SyncCredential(hkey="abc", endpoint="https://sync-1"))
+    monkeypatch.setattr(
+        backend,
+        "backend_capabilities",
+        lambda: BackendCapabilities(
+            backend="python-anki",
+            available=True,
+            supports_collection_reads=True,
+            supports_collection_writes=True,
+            supports_live_desktop=False,
+            supported_operations={"sync.status": True},
+        ),
+    )
+    monkeypatch.setattr(
+        backend,
+        "sync_status",
+        lambda path, credential: {
+            "required": "normal_sync",
+            "required_bool": True,
+            "performed": False,
+            "direction": None,
+            "changes": {},
+            "warnings": [],
+            "conflicts": [],
+            "new_endpoint": "https://sync-2",
+        },
+    )
+
+    result = SyncService(backend, credential_store=store).status("/tmp/test.anki2")
+
+    assert result["new_endpoint"] == "https://sync-2"
+    assert store.writes == [
+        ("python-anki", SyncCredential(hkey="abc", endpoint="https://sync-2")),
+    ]
+
+
+@pytest.mark.unit
 @proves("backup.list", "unit")
 def test_backup_list_normalizes_backups(tmp_path: Path) -> None:
     root = tmp_path / "Anki2"
@@ -417,6 +492,71 @@ def test_backup_restore_blocks_when_lock_detected(
 
 
 @pytest.mark.unit
+@proves("backup.get", "unit")
+def test_backup_get_accepts_external_backup_path(tmp_path: Path) -> None:
+    root = tmp_path / "Anki2"
+    profile_dir = root / "User 1"
+    backup_dir = profile_dir / "backups"
+    backup_dir.mkdir(parents=True)
+    collection_path = profile_dir / "collection.anki2"
+    collection_path.write_text("fixture")
+    external_backup = tmp_path / "copied-backup.colpkg"
+    external_backup.write_text("backup")
+
+    result = BackupService(
+        PythonAnkiBackend(),
+        resolver=ProfileResolver(data_root=root),
+    ).get(str(collection_path), name=None, path=str(external_backup))
+
+    assert result["path"] == str(external_backup.resolve())
+    assert result["name"] == external_backup.name
+
+
+@pytest.mark.unit
+@proves("backup.restore", "unit", "safety")
+def test_backup_restore_accepts_external_backup_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "Anki2"
+    profile_dir = root / "User 1"
+    backup_dir = profile_dir / "backups"
+    backup_dir.mkdir(parents=True)
+    collection_path = profile_dir / "collection.anki2"
+    collection_path.write_text("fixture")
+    external_backup = tmp_path / "copied-backup.colpkg"
+    external_backup.write_text("backup")
+    backend = PythonAnkiBackend()
+
+    def fake_create_backup(path, *, backup_folder, force):  # noqa: ARG001
+        (backup_folder / "safety-backup.colpkg").write_text("safety")
+        return {"created": True}
+
+    monkeypatch.setattr(backend, "create_backup", fake_create_backup)
+    monkeypatch.setattr(
+        backend,
+        "restore_backup",
+        lambda collection_path, backup_path, media_folder, media_db_path: {
+            "restored": True,
+            "backup_path": str(backup_path),
+            "collection_path": str(collection_path),
+            "media_folder": str(media_folder),
+            "media_db_path": str(media_db_path),
+        },
+    )
+
+    result = BackupService(
+        backend,
+        resolver=ProfileResolver(data_root=root),
+    ).restore(str(collection_path), name=None, path=str(external_backup), yes=True)
+
+    assert result["restored"] is True
+    assert result["backup_path"] == str(external_backup.resolve())
+    assert result["safety_backup_name"] == "safety-backup.colpkg"
+    assert result["safety_backup_path"] is not None
+
+
+@pytest.mark.unit
 def test_deck_create_includes_auto_backup_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = PythonAnkiBackend()
     service = DeckService(backend)
@@ -470,6 +610,108 @@ def test_note_delete_skips_auto_backup_when_disabled(monkeypatch: pytest.MonkeyP
     )
 
     assert result["auto_backup_created"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("method_name", "backend_method"),
+    [
+        ("add_tags", "add_tags_to_notes"),
+        ("remove_tags", "remove_tags_from_notes"),
+        ("move_deck", "move_note_to_deck"),
+    ],
+)
+def test_note_mutations_include_auto_backup_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    method_name: str,
+    backend_method: str,
+) -> None:
+    backend = PythonAnkiBackend()
+    service = NoteService(backend)
+    monkeypatch.setattr(
+        service.backup_service,
+        "auto_backup",
+        lambda path, enabled, dry_run: {
+            "created": enabled and not dry_run,
+            "name": "b.colpkg" if enabled and not dry_run else None,
+            "path": "/tmp/b.colpkg" if enabled and not dry_run else None,
+        },
+    )
+    if backend_method in {"add_tags_to_notes", "remove_tags_from_notes"}:
+        monkeypatch.setattr(
+            backend,
+            backend_method,
+            lambda path, note_ids, tags, dry_run: [
+                {"id": note_ids[0], "tags": tags, "dry_run": dry_run},
+            ],
+        )
+        result = getattr(service, method_name)(
+            "/tmp/test.anki2",
+            note_id=101,
+            tags=["tag1"],
+            dry_run=False,
+            yes=True,
+        )
+    else:
+        monkeypatch.setattr(
+            backend,
+            backend_method,
+            lambda path, note_id, deck_name, dry_run: {
+                "id": note_id,
+                "deck": deck_name,
+                "dry_run": dry_run,
+            },
+        )
+        result = getattr(service, method_name)(
+            "/tmp/test.anki2",
+            note_id=101,
+            deck_name="French",
+            dry_run=False,
+            yes=True,
+        )
+
+    assert result["auto_backup_created"] is True
+    assert result["auto_backup_name"] == "b.colpkg"
+    assert result["auto_backup_path"] == "/tmp/b.colpkg"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("method_name", "backend_method"),
+    [("suspend", "suspend_cards"), ("unsuspend", "unsuspend_cards")],
+)
+def test_card_mutations_include_auto_backup_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    method_name: str,
+    backend_method: str,
+) -> None:
+    backend = PythonAnkiBackend()
+    service = CardService(backend)
+    monkeypatch.setattr(
+        service.backup_service,
+        "auto_backup",
+        lambda path, enabled, dry_run: {
+            "created": enabled and not dry_run,
+            "name": "b.colpkg" if enabled and not dry_run else None,
+            "path": "/tmp/b.colpkg" if enabled and not dry_run else None,
+        },
+    )
+    monkeypatch.setattr(
+        backend,
+        backend_method,
+        lambda path, card_ids, dry_run: [{"id": card_ids[0], "dry_run": dry_run}],
+    )
+
+    result = getattr(service, method_name)(
+        "/tmp/test.anki2",
+        card_id=201,
+        dry_run=False,
+        yes=True,
+    )
+
+    assert result["auto_backup_created"] is True
+    assert result["auto_backup_name"] == "b.colpkg"
+    assert result["auto_backup_path"] == "/tmp/b.colpkg"
 
 
 @pytest.mark.unit
@@ -1430,7 +1672,68 @@ def test_import_notes_uses_existing_backend_add_note(
         "count": 1,
         "dry_run": True,
         "source": str(input_path.resolve()),
+        "auto_backup_created": False,
+        "auto_backup_name": None,
+        "auto_backup_path": None,
     }
+
+
+@pytest.mark.unit
+def test_import_notes_includes_auto_backup_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "notes.json"
+    input_path.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "deck": "Default",
+                        "model": "Basic",
+                        "fields": {"Front": "hello"},
+                        "tags": [],
+                    },
+                ],
+            },
+        ),
+    )
+
+    backend = PythonAnkiBackend()
+    service = ImportService(backend)
+    monkeypatch.setattr(
+        service.backup_service,
+        "auto_backup",
+        lambda path, enabled, dry_run: {
+            "created": enabled and not dry_run,
+            "name": "b.colpkg" if enabled and not dry_run else None,
+            "path": "/tmp/b.colpkg" if enabled and not dry_run else None,
+        },
+    )
+    monkeypatch.setattr(
+        backend,
+        "add_note",
+        lambda path, deck_name, model_name, fields, tags, dry_run: {
+            "id": 999,
+            "deck": deck_name,
+            "model": model_name,
+            "fields": fields,
+            "tags": tags,
+            "dry_run": dry_run,
+        },
+    )
+
+    result = service.import_notes(
+        "/tmp/test.anki2",
+        input_path=str(input_path),
+        stdin_json=False,
+        dry_run=False,
+        yes=True,
+    )
+
+    assert result["auto_backup_created"] is True
+    assert result["auto_backup_name"] == "b.colpkg"
+    assert result["auto_backup_path"] == "/tmp/b.colpkg"
 
 
 @pytest.mark.unit
@@ -1543,7 +1846,54 @@ def test_import_patch_uses_existing_backend_update_note(
         "count": 1,
         "dry_run": True,
         "source": str(input_path.resolve()),
+        "auto_backup_created": False,
+        "auto_backup_name": None,
+        "auto_backup_path": None,
     }
+
+
+@pytest.mark.unit
+def test_import_patch_includes_auto_backup_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "patches.json"
+    input_path.write_text(json.dumps({"items": [{"id": 101, "fields": {"Back": "updated"}}]}))
+
+    backend = PythonAnkiBackend()
+    service = ImportService(backend)
+    monkeypatch.setattr(
+        service.backup_service,
+        "auto_backup",
+        lambda path, enabled, dry_run: {
+            "created": enabled and not dry_run,
+            "name": "b.colpkg" if enabled and not dry_run else None,
+            "path": "/tmp/b.colpkg" if enabled and not dry_run else None,
+        },
+    )
+    monkeypatch.setattr(
+        backend,
+        "update_note",
+        lambda path, note_id, fields, dry_run: {
+            "id": note_id,
+            "model": "Basic",
+            "fields": fields,
+            "tags": [],
+            "dry_run": dry_run,
+        },
+    )
+
+    result = service.import_patch(
+        "/tmp/test.anki2",
+        input_path=str(input_path),
+        stdin_json=False,
+        dry_run=False,
+        yes=True,
+    )
+
+    assert result["auto_backup_created"] is True
+    assert result["auto_backup_name"] == "b.colpkg"
+    assert result["auto_backup_path"] == "/tmp/b.colpkg"
 
 
 @pytest.mark.unit

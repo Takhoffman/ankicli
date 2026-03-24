@@ -67,6 +67,24 @@ def _with_auto_backup_metadata(result: dict, backup: dict) -> dict:
     return payload
 
 
+def _persist_rotated_sync_endpoint(
+    *,
+    credential_store: CredentialStore,
+    backend_name: str,
+    credential,
+    result: dict,
+) -> dict:
+    payload = dict(result)
+    endpoint = payload.get("new_endpoint")
+    if not endpoint or endpoint == credential.endpoint:
+        return payload
+    credential_store.write(
+        backend_name=backend_name,
+        credential=type(credential)(hkey=credential.hkey, endpoint=endpoint),
+    )
+    return payload
+
+
 class DoctorService:
     """Environment and capability diagnostics."""
 
@@ -261,7 +279,13 @@ class SyncService:
             collection_path,
             command_name="sync status",
         )
-        return self.backend.sync_status(path, credential=self._credential())
+        credential = self._credential()
+        return _persist_rotated_sync_endpoint(
+            credential_store=self.credential_store,
+            backend_name=self.backend.name,
+            credential=credential,
+            result=self.backend.sync_status(path, credential=credential),
+        )
 
     def run(self, collection_path: str | None) -> dict:
         self._ensure_supported("sync.run")
@@ -270,13 +294,19 @@ class SyncService:
             collection_path,
             command_name="sync run",
         )
+        credential = self._credential()
         backup = self.backup_service.auto_backup(
             path,
             enabled=self.auto_backup_enabled,
             dry_run=False,
         )
         return _with_auto_backup_metadata(
-            self.backend.sync_run(path, credential=self._credential()),
+            _persist_rotated_sync_endpoint(
+                credential_store=self.credential_store,
+                backend_name=self.backend.name,
+                credential=credential,
+                result=self.backend.sync_run(path, credential=credential),
+            ),
             backup,
         )
 
@@ -287,13 +317,19 @@ class SyncService:
             collection_path,
             command_name="sync pull",
         )
+        credential = self._credential()
         backup = self.backup_service.auto_backup(
             path,
             enabled=self.auto_backup_enabled,
             dry_run=False,
         )
         return _with_auto_backup_metadata(
-            self.backend.sync_pull(path, credential=self._credential()),
+            _persist_rotated_sync_endpoint(
+                credential_store=self.credential_store,
+                backend_name=self.backend.name,
+                credential=credential,
+                result=self.backend.sync_pull(path, credential=credential),
+            ),
             backup,
         )
 
@@ -304,13 +340,19 @@ class SyncService:
             collection_path,
             command_name="sync push",
         )
+        credential = self._credential()
         backup = self.backup_service.auto_backup(
             path,
             enabled=self.auto_backup_enabled,
             dry_run=False,
         )
         return _with_auto_backup_metadata(
-            self.backend.sync_push(path, credential=self._credential()),
+            _persist_rotated_sync_endpoint(
+                credential_store=self.credential_store,
+                backend_name=self.backend.name,
+                credential=credential,
+                result=self.backend.sync_push(path, credential=credential),
+            ),
             backup,
         )
 
@@ -386,6 +428,27 @@ class BackupService:
             )
         return items
 
+    def _item_for_path(self, context, candidate: Path) -> dict:
+        if not candidate.exists() or not candidate.is_file():
+            raise BackupNotFoundError(
+                f"Backup path does not exist: {candidate}",
+                details={"path": str(candidate)},
+            )
+        if candidate.suffix != ".colpkg":
+            raise ValidationError("Backup path must point to a .colpkg artifact")
+        stat = candidate.stat()
+        return {
+            "name": candidate.name,
+            "path": str(candidate.resolve()),
+            "created_at": stat.st_mtime,
+            "size": stat.st_size,
+            "profile": context.name,
+            "collection_path": str(context.collection_path),
+            "kind": "anki-native",
+            "restorable": True,
+            "notes": [],
+        }
+
     def status(self, collection_path: str | None) -> dict:
         self._ensure_supported("backup.status")
         context = self._context(collection_path)
@@ -416,18 +479,7 @@ class BackupService:
             raise ValidationError("backup get requires exactly one of --name or --path")
         if path:
             candidate = Path(path).expanduser().resolve()
-            if not candidate.exists():
-                raise BackupNotFoundError(
-                    f"Backup path does not exist: {candidate}",
-                    details={"path": str(candidate)},
-                )
-            for item in self._list_items(context):
-                if item["path"] == str(candidate):
-                    return item
-            raise BackupNotFoundError(
-                f'Backup "{candidate}" was not found for this collection',
-                details={"path": str(candidate), "collection_path": str(context.collection_path)},
-            )
+            return self._item_for_path(context, candidate)
         for item in self._list_items(context):
             if item["name"] == name:
                 return item
@@ -1223,6 +1275,7 @@ class ImportService:
     def __init__(self, backend: BaseBackend, *, stdin_reader=None) -> None:
         self.backend = backend
         self.stdin_reader = stdin_reader or sys.stdin.read
+        self.backup_service = BackupService(backend)
 
     def _load_payload(
         self,
@@ -1262,6 +1315,7 @@ class ImportService:
         stdin_json: bool,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         collection = _resolve_collection_arg(
             self.backend,
@@ -1318,12 +1372,20 @@ class ImportService:
                 ),
             )
 
-        return {
-            "items": imported_items,
-            "count": len(imported_items),
-            "dry_run": dry_run,
-            "source": source,
-        }
+        backup = self.backup_service.auto_backup(
+            collection,
+            enabled=auto_backup_enabled,
+            dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            {
+                "items": imported_items,
+                "count": len(imported_items),
+                "dry_run": dry_run,
+                "source": source,
+            },
+            backup,
+        )
 
     def import_patch(
         self,
@@ -1333,6 +1395,7 @@ class ImportService:
         stdin_json: bool,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         collection = _resolve_collection_arg(
             self.backend,
@@ -1380,12 +1443,20 @@ class ImportService:
                 ),
             )
 
-        return {
-            "items": patched_items,
-            "count": len(patched_items),
-            "dry_run": dry_run,
-            "source": source,
-        }
+        backup = self.backup_service.auto_backup(
+            collection,
+            enabled=auto_backup_enabled,
+            dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            {
+                "items": patched_items,
+                "count": len(patched_items),
+                "dry_run": dry_run,
+                "source": source,
+            },
+            backup,
+        )
 
 
 class NoteService:
@@ -1483,17 +1554,26 @@ class NoteService:
         tags: list[str],
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="note add-tags")
         normalized_tags = self._parse_tags(tags)
         if not dry_run and not yes:
             raise UnsafeOperationError("note add-tags requires --yes or --dry-run")
-        return self.backend.add_tags_to_notes(
+        backup = self.backup_service.auto_backup(
             path,
-            note_ids=[note_id],
-            tags=normalized_tags,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
-        )[0]
+        )
+        return _with_auto_backup_metadata(
+            self.backend.add_tags_to_notes(
+                path,
+                note_ids=[note_id],
+                tags=normalized_tags,
+                dry_run=dry_run,
+            )[0],
+            backup,
+        )
 
     def remove_tags(
         self,
@@ -1503,6 +1583,7 @@ class NoteService:
         tags: list[str],
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(
             self.backend,
@@ -1512,12 +1593,20 @@ class NoteService:
         normalized_tags = self._parse_tags(tags)
         if not dry_run and not yes:
             raise UnsafeOperationError("note remove-tags requires --yes or --dry-run")
-        return self.backend.remove_tags_from_notes(
+        backup = self.backup_service.auto_backup(
             path,
-            note_ids=[note_id],
-            tags=normalized_tags,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
-        )[0]
+        )
+        return _with_auto_backup_metadata(
+            self.backend.remove_tags_from_notes(
+                path,
+                note_ids=[note_id],
+                tags=normalized_tags,
+                dry_run=dry_run,
+            )[0],
+            backup,
+        )
 
     def move_deck(
         self,
@@ -1527,6 +1616,7 @@ class NoteService:
         deck_name: str,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="note move-deck")
         normalized_deck_name = deck_name.strip()
@@ -1534,11 +1624,19 @@ class NoteService:
             raise ValidationError("--deck must not be empty")
         if not dry_run and not yes:
             raise UnsafeOperationError("note move-deck requires --yes or --dry-run")
-        return self.backend.move_note_to_deck(
+        backup = self.backup_service.auto_backup(
             path,
-            note_id=note_id,
-            deck_name=normalized_deck_name,
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
+        )
+        return _with_auto_backup_metadata(
+            self.backend.move_note_to_deck(
+                path,
+                note_id=note_id,
+                deck_name=normalized_deck_name,
+                dry_run=dry_run,
+            ),
+            backup,
         )
 
     def _parse_tags(self, tags: list[str]) -> list[str]:
@@ -1553,6 +1651,7 @@ class CardService:
 
     def __init__(self, backend: BaseBackend) -> None:
         self.backend = backend
+        self.backup_service = BackupService(backend)
 
     def get(self, collection_path: str | None, *, card_id: int) -> dict:
         return self.backend.get_card(
@@ -1567,15 +1666,24 @@ class CardService:
         card_id: int,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="card suspend")
         if not dry_run and not yes:
             raise UnsafeOperationError("card suspend requires --yes or --dry-run")
-        return self.backend.suspend_cards(
+        backup = self.backup_service.auto_backup(
             path,
-            card_ids=[card_id],
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
-        )[0]
+        )
+        return _with_auto_backup_metadata(
+            self.backend.suspend_cards(
+                path,
+                card_ids=[card_id],
+                dry_run=dry_run,
+            )[0],
+            backup,
+        )
 
     def unsuspend(
         self,
@@ -1584,15 +1692,24 @@ class CardService:
         card_id: int,
         dry_run: bool,
         yes: bool,
+        auto_backup_enabled: bool = True,
     ) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="card unsuspend")
         if not dry_run and not yes:
             raise UnsafeOperationError("card unsuspend requires --yes or --dry-run")
-        return self.backend.unsuspend_cards(
+        backup = self.backup_service.auto_backup(
             path,
-            card_ids=[card_id],
+            enabled=auto_backup_enabled,
             dry_run=dry_run,
-        )[0]
+        )
+        return _with_auto_backup_metadata(
+            self.backend.unsuspend_cards(
+                path,
+                card_ids=[card_id],
+                dry_run=dry_run,
+            )[0],
+            backup,
+        )
 
 
 class PlaceholderMutationService:
