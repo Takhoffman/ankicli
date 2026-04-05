@@ -2,6 +2,11 @@
 
 `ankicli` is a local-first, automation-grade CLI for inspecting and mutating Anki collections.
 
+Supported platforms are macOS, Windows, and Linux. Product-complete support means the default
+packaged install works, the bundled `python-anki` runtime is usable, `--collection` workflows
+work, `--profile` resolves the platform-default Anki data root, local backup flows work, and
+auth/sync credential storage works.
+
 The repository is intentionally test-first. The initial goal is to make the product shape, safety
 rules, and test tiers durable before the full feature set turns green.
 
@@ -14,10 +19,20 @@ rules, and test tiers durable before the full feature set turns green.
 - Core V1 read/search/note/card mutation commands are implemented.
 - Diagnostics, collection ops, search ergonomics, and read-only media inspection are implemented.
 - Local profile discovery/resolution and backup flows are implemented for `python-anki`.
+- The default packaged install bundles the supported `anki==25.9.2` runtime.
 
 ## Quickstart
 
 Use the packaged CLI:
+
+```bash
+pipx install ankicli
+ankicli --help
+ankicli --version
+ankicli --json doctor backend
+```
+
+Build and install the local wheel:
 
 ```bash
 uv build
@@ -117,7 +132,8 @@ Disposable real backup tier:
   `/tmp`.
 - It does not touch a personal profile.
 - It does not require Anki Desktop, AnkiConnect, or AnkiWeb.
-- It does require a real `anki` runtime via `ANKI_SOURCE_PATH`.
+- Normal installs already include the supported `anki` runtime.
+- The contributor real-backend suite still uses `ANKI_SOURCE_PATH`.
 - Shortcut: `make test-backup-real`
 
 Full path:
@@ -331,7 +347,7 @@ Unsupported backend operations now fail with the structured error code
 Sync/auth notes:
 
 - `python-anki` is the standalone sync/auth backend.
-- `auth login` stores sync credentials in the OS keychain when supported.
+- `auth login` stores sync credentials in the supported local credential store.
 - `sync status` is the intended preflight before `sync run`.
 - `sync pull` and `sync push` are explicit expert flows.
 
@@ -473,8 +489,8 @@ Notes:
 
 ## Real Python-Anki Setup
 
-Use this only for real backend development. It is not required for normal scaffold, contract,
-fixture-integration, e2e, or distribution work.
+Use this only for contributor-side real backend development. It is not required for normal user
+installs, scaffold, contract, fixture-integration, e2e, or distribution work.
 
 Pinned upstream reference:
 
@@ -506,7 +522,8 @@ UV_CACHE_DIR=.uv-cache uv run python scripts/prepare_real_backend.py --reset
 
 Notes:
 
-- `ANKI_SOURCE_PATH` is the only supported local source override for real `python-anki` work.
+- Default installs already bundle the supported `anki==25.9.2` runtime.
+- `ANKI_SOURCE_PATH` is the contributor override for real `python-anki` development work.
 - The runtime currently looks for `pylib/`, then `python/`, then the repo root under
   `ANKI_SOURCE_PATH`.
 - A raw upstream source checkout is currently enough for import-path checks, but not necessarily for

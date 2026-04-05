@@ -3,11 +3,27 @@
 from __future__ import annotations
 
 import os
+import platform
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
 from ankicli.app.errors import ProfileNotFoundError, ProfileResolutionError
+
+
+def default_anki2_root() -> Path:
+    system = platform.system()
+    if system == "Darwin":
+        return Path.home() / "Library/Application Support/Anki2"
+    if system == "Windows":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return Path(appdata) / "Anki2"
+        return Path.home() / "AppData/Roaming/Anki2"
+    xdg_data_home = os.environ.get("XDG_DATA_HOME")
+    if xdg_data_home:
+        return Path(xdg_data_home) / "Anki2"
+    return Path.home() / ".local/share/Anki2"
 
 
 @dataclass(slots=True)
@@ -45,7 +61,7 @@ class ProfileResolver:
         override = os.environ.get("ANKICLI_ANKI2_ROOT")
         if override:
             return Path(override)
-        return Path.home() / "Library/Application Support/Anki2"
+        return default_anki2_root()
 
     def _prefs_db(self) -> Path:
         return self.data_root / "prefs21.db"

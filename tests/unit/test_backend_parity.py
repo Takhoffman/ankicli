@@ -108,7 +108,14 @@ class _FakeCollection:
         return [101]
 
     def find_cards(self, query: str) -> list[int]:
-        assert query in {"", 'deck:"Default"'}
+        assert query in {
+            "",
+            'deck:"Default"',
+            'deck:"Default" is:due',
+            'deck:"Default" is:new',
+            'deck:"Default" is:learn',
+            'deck:"Default" is:review',
+        }
         return [201]
 
     def get_note(self, note_id: int):
@@ -384,8 +391,26 @@ def test_deck_stats_shared_shape_parity(monkeypatch: pytest.MonkeyPatch, tmp_pat
     python_result = CatalogService(python_backend).deck_stats(str(collection_path), name="Default")
     ankiconnect_result = CatalogService(ankiconnect_backend).deck_stats(None, name="Default")
 
-    assert set(python_result) == {"id", "name", "note_count", "card_count"}
-    assert set(ankiconnect_result) == {"id", "name", "note_count", "card_count"}
+    assert set(python_result) == {
+        "id",
+        "name",
+        "note_count",
+        "card_count",
+        "due_count",
+        "new_count",
+        "learning_count",
+        "review_count",
+    }
+    assert set(ankiconnect_result) == {
+        "id",
+        "name",
+        "note_count",
+        "card_count",
+        "due_count",
+        "new_count",
+        "learning_count",
+        "review_count",
+    }
 
 
 @pytest.mark.unit

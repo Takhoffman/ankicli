@@ -20,6 +20,14 @@ def test_doctor_env_json_contract(runner) -> None:
     assert "anki_source_path" in payload["data"]
     assert "anki_source_import_path" in payload["data"]
     assert "anki_import_available" in payload["data"]
+    assert "anki_module_path" in payload["data"]
+    assert "anki_version" in payload["data"]
+    assert "default_anki2_root" in payload["data"]
+    assert "supported_runtime" in payload["data"]
+    assert "runtime_failure_reason" in payload["data"]
+    assert "credential_storage_backend" in payload["data"]
+    assert "credential_storage_available" in payload["data"]
+    assert "credential_storage_fallback" in payload["data"]
 
 
 @pytest.mark.unit
@@ -143,6 +151,7 @@ def test_doctor_backend_reports_backend_summary(runner) -> None:
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
     assert payload["data"]["name"] == "ankiconnect"
+    assert "supported_runtime" in payload["data"]
 
 
 @pytest.mark.unit

@@ -5,6 +5,11 @@
 `ankicli` is a local-first Anki collection management CLI for inspection and mutation. It is not a
 study app and not a TUI.
 
+Supported platforms are macOS, Windows, and Linux. Product-complete support means: the default
+packaged install works, the bundled `python-anki` runtime is usable, `--collection` workflows work,
+`--profile` resolves the platform-default Anki data root, local backup flows work, and auth/sync
+credential storage works.
+
 ## Working Rules
 
 - Search first. The repo is small now, but preserve that habit as it grows.

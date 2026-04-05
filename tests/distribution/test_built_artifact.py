@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -51,6 +52,30 @@ def test_built_wheel_installs_and_exposes_cli() -> None:
         install = _run([str(python_bin), "-m", "pip", "install", str(wheel)])
         assert install.returncode == 0, install.stderr
         assert cli_bin.exists()
+
+        backend_result = _run([str(cli_bin), "--json", "doctor", "backend"])
+        assert backend_result.returncode == 0, backend_result.stderr
+        backend_payload = json.loads(backend_result.stdout)
+        assert backend_payload["data"]["name"] == "python-anki"
+        assert backend_payload["data"]["available"] is True
+        assert backend_payload["data"]["supported_runtime"] is True
+        assert backend_payload["data"]["runtime_failure_reason"] is None
+        assert backend_payload["data"]["default_anki2_root"]
+        assert backend_payload["data"]["credential_storage_backend"] in {
+            "keyring",
+            "file-fallback",
+        }
+        assert backend_payload["data"]["credential_storage_available"] is True
+
+        env_result = _run([str(cli_bin), "--json", "doctor", "env"])
+        assert env_result.returncode == 0, env_result.stderr
+        env_payload = json.loads(env_result.stdout)
+        assert env_payload["data"]["default_anki2_root"]
+        assert env_payload["data"]["credential_storage_backend"] in {
+            "keyring",
+            "file-fallback",
+        }
+        assert env_payload["data"]["credential_storage_available"] is True
 
         help_result = _run([str(cli_bin), "--help"])
         assert help_result.returncode == 0, help_result.stderr

@@ -9,6 +9,8 @@ description = "Local-first, automation-grade Anki collection management CLI"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "anki==25.9.2",
+  "keyring>=25,<26",
   "pydantic>=2.7,<3",
   "typer>=0.12,<1",
 ]

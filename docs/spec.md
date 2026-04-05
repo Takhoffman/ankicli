@@ -73,7 +73,8 @@ service layer, JSON-first responses, and a backend seam present from day one.
 - Command placeholders are acceptable only when covered by explicit contract tests and clearly
   documented as incomplete.
 - `uv` remains the workflow frontend; `hatchling` remains the configured build backend.
-- Real `python-anki` development uses a sibling local source checkout configured through
+- Default packaged installs bundle the supported `anki==25.9.2` runtime.
+- Real `python-anki` development still supports a sibling local source checkout configured through
   `ANKI_SOURCE_PATH`.
 - Default pinned upstream reference for local setup: Anki tag `25.09.2`.
 - Raw source checkout support is currently sufficient for import-path verification, but real
@@ -85,7 +86,7 @@ service layer, JSON-first responses, and a backend seam present from day one.
 - `ANKI_SOURCE_PATH=/absolute/path/to/anki`
 - `ANKICLI_REAL_COLLECTION=/absolute/path/to/collection.anki2` for opt-in true collection checks
 - Runtime resolution order under that path: `pylib/`, then `python/`, then repo root
-- Default repo workflow does not require Anki source
+- Default repo workflow and default user installs do not require Anki source
 - `backend_python_anki_real` is the only test tier that depends on this setup today
 - `backend_python_anki_backup_real` also depends on this setup, but creates its own disposable
   profile root via `ANKICLI_ANKI2_ROOT` during the test run
@@ -200,9 +201,8 @@ service layer, JSON-first responses, and a backend seam present from day one.
 
 - Machine-readable mode is `--json` and should be treated as the default automation surface.
 - `--collection` and `--profile` are mutually exclusive.
-- `--profile` resolves local macOS Anki data rooted at
-  `~/Library/Application Support/Anki2` by default.
-- `auth login` stores sync credentials in the OS keychain when supported.
+- `--profile` resolves local Anki data using platform defaults for macOS, Windows, and Linux.
+- `auth login` stores sync credentials in the supported local credential store.
 - `sync status` is the safe preflight command before any real sync operation.
 - Sync is not backup. Backup and restore are local rollback flows, not remote replication.
 - `backup restore` is CLI-only, requires `--yes`, and creates a fresh safety backup first.

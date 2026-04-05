@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -35,7 +36,11 @@ from ankicli.app.services import (
     TagService,
 )
 from ankicli.backends.python_anki import PythonAnkiBackend
-from ankicli.runtime import configure_anki_source_path
+from ankicli.runtime import (
+    SUPPORTED_ANKI_VERSION,
+    configure_anki_source_path,
+    probe_anki_runtime,
+)
 from tests.proof import proves
 
 
@@ -48,6 +53,14 @@ def test_doctor_env_report_has_expected_keys() -> None:
     assert "anki_source_path" in report
     assert "anki_source_import_path" in report
     assert "anki_import_available" in report
+    assert "anki_module_path" in report
+    assert "anki_version" in report
+    assert "default_anki2_root" in report
+    assert "supported_runtime" in report
+    assert "runtime_failure_reason" in report
+    assert "credential_storage_backend" in report
+    assert "credential_storage_available" in report
+    assert "credential_storage_fallback" in report
 
 
 @pytest.mark.unit
@@ -58,6 +71,7 @@ def test_python_anki_backend_reports_capabilities() -> None:
     assert capabilities.supports_live_desktop is False
     assert "note.delete" in capabilities.supported_operations
     assert capabilities.supported_operations["note.delete"] is capabilities.available
+    assert capabilities.supported_runtime_version == SUPPORTED_ANKI_VERSION
 
 
 @pytest.mark.unit
@@ -73,6 +87,8 @@ def test_doctor_backend_report_summarizes_operation_counts(monkeypatch: pytest.M
             supports_collection_reads=True,
             supports_collection_writes=True,
             supports_live_desktop=False,
+            runtime_mode="packaged",
+            supported_runtime=True,
             supported_operations={
                 "collection.info": True,
                 "note.delete": True,
@@ -85,6 +101,8 @@ def test_doctor_backend_report_summarizes_operation_counts(monkeypatch: pytest.M
 
     assert report["name"] == "python-anki"
     assert report["available"] is True
+    assert report["runtime_mode"] == "packaged"
+    assert report["supported_runtime"] is True
     assert report["supported_operation_count"] == 2
     assert report["unsupported_operation_count"] == 1
 
@@ -102,6 +120,8 @@ def test_doctor_capabilities_report_adds_operation_counts(monkeypatch: pytest.Mo
             supports_collection_reads=True,
             supports_collection_writes=True,
             supports_live_desktop=False,
+            runtime_mode="packaged",
+            supported_runtime=True,
             supported_operations={"collection.info": True, "tag.rename": False},
         ),
     )
@@ -126,6 +146,7 @@ def test_backend_test_connection_uses_backend_capabilities(monkeypatch: pytest.M
             supports_collection_reads=True,
             supports_collection_writes=True,
             supports_live_desktop=False,
+            runtime_failure_reason="missing_runtime",
             supported_operations={"collection.info": True},
         ),
     )
@@ -138,6 +159,133 @@ def test_backend_test_connection_uses_backend_capabilities(monkeypatch: pytest.M
         "available": False,
         "notes": [],
     }
+
+
+@pytest.mark.unit
+def test_probe_anki_runtime_reports_missing_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ANKI_SOURCE_PATH", raising=False)
+    monkeypatch.setattr(
+        "ankicli.runtime._import_anki_module",
+        lambda: (_ for _ in ()).throw(ImportError("missing anki")),
+    )
+
+    probe = probe_anki_runtime()
+
+    assert probe.import_available is False
+    assert probe.runtime_mode == "packaged"
+    assert probe.supported_runtime is False
+    assert probe.failure_reason == "missing_runtime"
+
+
+@pytest.mark.unit
+def test_probe_anki_runtime_reports_supported_packaged_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_anki = SimpleNamespace(
+        __file__="/tmp/site-packages/anki/__init__.py",
+        __version__=SUPPORTED_ANKI_VERSION,
+    )
+    fake_collection_module = SimpleNamespace(Collection=object)
+    monkeypatch.delenv("ANKI_SOURCE_PATH", raising=False)
+
+    def fake_import_module(name: str):
+        if name == "anki":
+            return fake_anki
+        if name == "anki.collection":
+            return fake_collection_module
+        raise ImportError(name)
+
+    monkeypatch.setattr("ankicli.runtime.importlib.import_module", fake_import_module)
+
+    probe = probe_anki_runtime()
+
+    assert probe.import_available is True
+    assert probe.runtime_mode == "packaged"
+    assert probe.version == SUPPORTED_ANKI_VERSION
+    assert probe.collection_import_available is True
+    assert probe.supported_runtime is True
+    assert probe.failure_reason is None
+
+
+@pytest.mark.unit
+def test_probe_anki_runtime_reports_version_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_anki = SimpleNamespace(__file__="/tmp/site-packages/anki/__init__.py", __version__="24.11")
+    fake_collection_module = SimpleNamespace(Collection=object)
+    monkeypatch.delenv("ANKI_SOURCE_PATH", raising=False)
+
+    def fake_import_module(name: str):
+        if name == "anki":
+            return fake_anki
+        if name == "anki.collection":
+            return fake_collection_module
+        raise ImportError(name)
+
+    monkeypatch.setattr("ankicli.runtime.importlib.import_module", fake_import_module)
+
+    probe = probe_anki_runtime()
+
+    assert probe.import_available is True
+    assert probe.supported_runtime is False
+    assert probe.failure_reason == "version_mismatch"
+
+
+@pytest.mark.unit
+def test_probe_anki_runtime_reports_missing_collection_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_anki = SimpleNamespace(
+        __file__="/tmp/site-packages/anki/__init__.py",
+        __version__=SUPPORTED_ANKI_VERSION,
+    )
+    monkeypatch.delenv("ANKI_SOURCE_PATH", raising=False)
+
+    def fake_import_module(name: str):
+        if name == "anki":
+            return fake_anki
+        raise ImportError(name)
+
+    monkeypatch.setattr("ankicli.runtime.importlib.import_module", fake_import_module)
+
+    probe = probe_anki_runtime()
+
+    assert probe.import_available is True
+    assert probe.collection_import_available is False
+    assert probe.supported_runtime is False
+    assert probe.failure_reason == "collection_api_unavailable"
+
+
+@pytest.mark.unit
+def test_probe_anki_runtime_marks_override_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = tmp_path / "anki"
+    (source_root / "pylib").mkdir(parents=True)
+    fake_anki = SimpleNamespace(
+        __file__=str(source_root / "pylib" / "anki" / "__init__.py"),
+        __version__=SUPPORTED_ANKI_VERSION,
+    )
+    fake_collection_module = SimpleNamespace(Collection=object)
+    monkeypatch.setenv("ANKI_SOURCE_PATH", str(source_root))
+
+    def fake_import_module(name: str):
+        if name == "anki":
+            return fake_anki
+        if name == "anki.collection":
+            return fake_collection_module
+        raise ImportError(name)
+
+    monkeypatch.setattr("ankicli.runtime.importlib.import_module", fake_import_module)
+
+    probe = probe_anki_runtime()
+
+    assert probe.runtime_mode == "override"
+    assert probe.override_active is True
+    assert probe.source_import_path == str((source_root / "pylib").resolve())
 
 
 @pytest.mark.unit
@@ -162,8 +310,16 @@ def test_backend_operation_unsupported_is_structured_for_ankiconnect() -> None:
 
 
 class _FakeCredentialStore:
-    def __init__(self, credential: SyncCredential | None = None) -> None:
+    def __init__(
+        self,
+        credential: SyncCredential | None = None,
+        *,
+        backend_label: str = "keyring",
+        fallback: bool = False,
+    ) -> None:
         self.credential = credential
+        self.backend_label = backend_label
+        self.fallback = fallback
         self.writes: list[tuple[str, SyncCredential]] = []
         self.clears: list[str] = []
 
@@ -180,6 +336,15 @@ class _FakeCredentialStore:
         deleted = self.credential is not None
         self.credential = None
         return deleted
+
+    def info(self):
+        return SimpleNamespace(
+            backend=self.backend_label,
+            available=True,
+            fallback=self.fallback,
+            path=None,
+            reason=None,
+        )
 
 
 @pytest.mark.unit
@@ -198,7 +363,11 @@ def test_auth_status_reports_stored_credential(monkeypatch: pytest.MonkeyPatch) 
 
     result = AuthService(backend, credential_store=store).status("/tmp/test.anki2")
 
-    assert result == {"authenticated": True, "endpoint": "https://sync"}
+    assert result == {
+        "authenticated": True,
+        "endpoint": "https://sync",
+        "credential_backend": "keyring",
+    }
 
 
 @pytest.mark.unit
@@ -224,6 +393,7 @@ def test_auth_login_persists_sync_credential(monkeypatch: pytest.MonkeyPatch) ->
     )
 
     assert result["authenticated"] is True
+    assert result["credential_backend"] == "keyring"
     assert store.writes == [
         (
             "python-anki",
@@ -242,6 +412,7 @@ def test_auth_logout_deletes_stored_credential(monkeypatch: pytest.MonkeyPatch) 
     result = AuthService(backend, credential_store=store).logout(None)
 
     assert result["deleted"] is True
+    assert result["credential_backend"] == "keyring"
     assert store.clears == ["python-anki"]
 
 
@@ -798,6 +969,10 @@ def test_deck_stats_uses_existing_backend_primitives(monkeypatch: pytest.MonkeyP
         "name": "Default",
         "note_count": 7,
         "card_count": 11,
+        "due_count": 11,
+        "new_count": 11,
+        "learning_count": 11,
+        "review_count": 11,
     }
 
 

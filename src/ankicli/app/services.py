@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import platform
 import sys
 from pathlib import Path
 
-from ankicli.app.credentials import CredentialStore, MacOSKeychainCredentialStore
+from ankicli.app.credentials import (
+    CredentialStore,
+    default_credential_store,
+    probe_default_credential_store,
+)
 from ankicli.app.errors import (
     AuthRequiredError,
     BackendOperationUnsupportedError,
@@ -20,9 +23,9 @@ from ankicli.app.errors import (
     UnsafeOperationError,
     ValidationError,
 )
-from ankicli.app.profiles import ProfileResolver
+from ankicli.app.profiles import ProfileResolver, default_anki2_root
 from ankicli.backends.base import BaseBackend
-from ankicli.runtime import configure_anki_source_path
+from ankicli.runtime import probe_anki_runtime
 
 
 def _resolve_collection_arg(
@@ -52,7 +55,7 @@ def _parse_field_assignments(assignments: list[str]) -> dict[str, str]:
 
 
 def _default_credential_store() -> CredentialStore:
-    return MacOSKeychainCredentialStore()
+    return default_credential_store()
 
 
 def _default_profile_resolver() -> ProfileResolver:
@@ -89,31 +92,77 @@ class DoctorService:
     """Environment and capability diagnostics."""
 
     def env_report(self) -> dict:
-        configured_source_path = configure_anki_source_path()
+        probe = probe_anki_runtime()
+        credential_store = probe_default_credential_store()
         return {
             "python_version": platform.python_version(),
             "platform": platform.platform(),
-            "anki_source_path": os.environ.get("ANKI_SOURCE_PATH"),
-            "anki_source_import_path": configured_source_path,
-            "anki_import_available": importlib.util.find_spec("anki") is not None,
+            "default_anki2_root": str(default_anki2_root().expanduser().resolve()),
+            "anki_source_path": probe.source_path,
+            "anki_source_import_path": probe.source_import_path,
+            "anki_import_available": probe.import_available,
+            "anki_module_path": probe.module_path,
+            "anki_version": probe.version,
+            "supported_runtime_version": probe.supported_runtime_version,
+            "anki_runtime_mode": probe.runtime_mode,
+            "anki_runtime_override_active": probe.override_active,
+            "supported_runtime": probe.supported_runtime,
+            "runtime_failure_reason": probe.failure_reason,
+            "credential_storage_backend": credential_store.backend,
+            "credential_storage_available": credential_store.available,
+            "credential_storage_fallback": credential_store.fallback,
+            "credential_storage_path": credential_store.path,
+            "credential_storage_reason": credential_store.reason,
             "ankiconnect_url": os.environ.get("ANKICONNECT_URL", "http://127.0.0.1:8765"),
         }
 
     def backend_report(self, backend: BaseBackend) -> dict:
         capabilities = backend.backend_capabilities()
+        credential_store = probe_default_credential_store()
         supported_count = sum(
             1 for supported in capabilities.supported_operations.values() if supported
+        )
+        supported_workflow_count = sum(
+            1 for supported in capabilities.supported_workflows.values() if supported
         )
         return {
             "name": backend.name,
             "available": capabilities.available,
             "supports_live_desktop": capabilities.supports_live_desktop,
+            "runtime_mode": capabilities.runtime_mode,
+            "runtime_override_active": capabilities.runtime_override_active,
+            "runtime_module_path": capabilities.runtime_module_path,
+            "runtime_version": capabilities.runtime_version,
+            "supported_runtime_version": capabilities.supported_runtime_version,
+            "supported_runtime": capabilities.supported_runtime,
+            "runtime_failure_reason": capabilities.runtime_failure_reason,
             "supported_operation_count": supported_count,
             "unsupported_operation_count": len(capabilities.supported_operations) - supported_count,
+            "supported_workflow_count": supported_workflow_count,
+            "unsupported_workflow_count": len(capabilities.supported_workflows)
+            - supported_workflow_count,
             "ankiconnect_url": os.environ.get("ANKICONNECT_URL", "http://127.0.0.1:8765")
             if backend.name == "ankiconnect"
             else None,
+            "default_anki2_root": str(default_anki2_root().expanduser().resolve())
+            if backend.name == "python-anki"
+            else None,
             "anki_source_path": os.environ.get("ANKI_SOURCE_PATH")
+            if backend.name == "python-anki"
+            else None,
+            "credential_storage_backend": credential_store.backend
+            if backend.name == "python-anki"
+            else None,
+            "credential_storage_available": credential_store.available
+            if backend.name == "python-anki"
+            else None,
+            "credential_storage_fallback": credential_store.fallback
+            if backend.name == "python-anki"
+            else None,
+            "credential_storage_path": credential_store.path
+            if backend.name == "python-anki"
+            else None,
+            "credential_storage_reason": credential_store.reason
             if backend.name == "python-anki"
             else None,
             "notes": capabilities.notes,
@@ -122,11 +171,18 @@ class DoctorService:
     def capabilities_report(self, backend: BaseBackend) -> dict:
         capabilities = backend.backend_capabilities().model_dump()
         supported = capabilities["supported_operations"]
+        supported_workflows = capabilities["supported_workflows"]
         capabilities["supported_operation_count"] = sum(
             1 for value in supported.values() if value
         )
         capabilities["unsupported_operation_count"] = sum(
             1 for value in supported.values() if not value
+        )
+        capabilities["supported_workflow_count"] = sum(
+            1 for value in supported_workflows.values() if value
+        )
+        capabilities["unsupported_workflow_count"] = sum(
+            1 for value in supported_workflows.values() if not value
         )
         return capabilities
 
@@ -199,10 +255,12 @@ class AuthService:
 
     def status(self, collection_path: str | None) -> dict:
         credential = self.credential_store.read(backend_name=self.backend.name)
-        return self.backend.auth_status(
+        payload = self.backend.auth_status(
             None if collection_path is None else Path(collection_path),
             credential=credential,
         )
+        payload["credential_backend"] = self.credential_store.info().backend
+        return payload
 
     def login(
         self,
@@ -224,9 +282,10 @@ class AuthService:
             endpoint=endpoint,
         )
         self.credential_store.write(backend_name=self.backend.name, credential=credential)
+        store_info = self.credential_store.info()
         return {
             "authenticated": True,
-            "credential_backend": "macos-keychain",
+            "credential_backend": store_info.backend,
             "credential_present": True,
             "endpoint": credential.endpoint,
         }
@@ -234,9 +293,10 @@ class AuthService:
     def logout(self, collection_path: str | None) -> dict:
         result = self.backend.logout(None if collection_path is None else Path(collection_path))
         deleted = self.credential_store.clear(backend_name=self.backend.name)
+        store_info = self.credential_store.info()
         return {
             "authenticated": False,
-            "credential_backend": "macos-keychain",
+            "credential_backend": store_info.backend,
             "credential_present": False,
             "deleted": deleted,
             **result,
@@ -679,14 +739,22 @@ class CatalogService:
     def deck_stats(self, collection_path: str | None, *, name: str) -> dict:
         path = _resolve_collection_arg(self.backend, collection_path, command_name="deck stats")
         deck = self.backend.get_deck(path, name=name)
-        note_query = f'deck:"{name}"'
-        note_result = self.backend.find_notes(path, note_query, limit=1, offset=0)
-        card_result = self.backend.find_cards(path, note_query, limit=1, offset=0)
+        base_query = f'deck:"{name}"'
+        note_result = self.backend.find_notes(path, base_query, limit=1, offset=0)
+        card_result = self.backend.find_cards(path, base_query, limit=1, offset=0)
+        due_result = self.backend.find_cards(path, f"{base_query} is:due", limit=1, offset=0)
+        new_result = self.backend.find_cards(path, f"{base_query} is:new", limit=1, offset=0)
+        learning_result = self.backend.find_cards(path, f"{base_query} is:learn", limit=1, offset=0)
+        review_result = self.backend.find_cards(path, f"{base_query} is:review", limit=1, offset=0)
         return {
             "id": deck["id"],
             "name": deck["name"],
             "note_count": note_result["total"],
             "card_count": card_result["total"],
+            "due_count": due_result["total"],
+            "new_count": new_result["total"],
+            "learning_count": learning_result["total"],
+            "review_count": review_result["total"],
         }
 
     def list_models(self, collection_path: str | None) -> dict:

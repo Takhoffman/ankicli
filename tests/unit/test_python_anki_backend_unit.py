@@ -317,7 +317,7 @@ def test_auth_status_reports_credential_presence(monkeypatch: pytest.MonkeyPatch
 
     assert result == {
         "authenticated": True,
-        "credential_backend": "macos-keychain",
+        "credential_backend": "credential-store",
         "credential_present": True,
         "backend_available": True,
         "supports_sync": True,

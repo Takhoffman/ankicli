@@ -66,7 +66,7 @@ def _collection_import_available() -> bool:
     for module_name in module_candidates:
         try:
             module = importlib.import_module(module_name)
-        except ImportError:
+        except Exception:
             continue
         if getattr(module, "Collection", None) is not None:
             return True
