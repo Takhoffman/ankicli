@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import importlib.util
 import re
 import shutil
 from collections.abc import Iterator
@@ -11,6 +10,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ankicli.app.catalog import (
+    supported_operations_for_backend,
+    supported_workflows_for_operations,
+    workflow_support_for_operations,
+)
 from ankicli.app.credentials import SyncCredential
 from ankicli.app.errors import (
     AnkiCliError,
@@ -32,8 +36,9 @@ from ankicli.app.errors import (
     TagNotFoundError,
     ValidationError,
 )
-from ankicli.app.models import IMPLEMENTED_BACKEND_OPERATIONS, BackendCapabilities
+from ankicli.app.models import BackendCapabilities
 from ankicli.backends.base import BaseBackend
+from ankicli.runtime import probe_anki_runtime
 
 
 class PythonAnkiBackend(BaseBackend):
@@ -44,32 +49,42 @@ class PythonAnkiBackend(BaseBackend):
     )
 
     def supported_operations(self) -> dict[str, bool]:
-        available = importlib.util.find_spec("anki") is not None
-        supported = {operation: available for operation in IMPLEMENTED_BACKEND_OPERATIONS}
-        for operation in (
-            "profile.list",
-            "profile.get",
-            "profile.default",
-            "profile.resolve",
-            "backup.status",
-            "backup.list",
-            "backup.get",
-        ):
-            supported[operation] = True
-        return supported
+        probe = probe_anki_runtime()
+        return supported_operations_for_backend(self.name, available=probe.supported_runtime)
 
     def backend_capabilities(self) -> BackendCapabilities:
-        available = importlib.util.find_spec("anki") is not None
         notes = []
-        if not available:
-            notes.append("Python package 'anki' is not installed in the current environment.")
+        probe = probe_anki_runtime()
+        if probe.failure_reason == "missing_runtime":
+            notes.append(
+                "Python package 'anki' is not installed in the current environment. "
+                "Install ankicli through the default bundled path."
+            )
+        elif probe.failure_reason == "version_mismatch":
+            notes.append(
+                "Installed Python package 'anki' does not match the supported bundled version."
+            )
+        elif probe.failure_reason == "collection_api_unavailable":
+            notes.append("Python-Anki Collection API is unavailable in this environment.")
+        if probe.override_active:
+            notes.append("ANKI_SOURCE_PATH override is active; contributor runtime mode in use.")
+        supported_operations = self.supported_operations()
         return BackendCapabilities(
             backend=self.name,
-            available=available,
-            supports_collection_reads=available,
-            supports_collection_writes=available,
+            available=probe.supported_runtime,
+            supports_collection_reads=probe.supported_runtime,
+            supports_collection_writes=probe.supported_runtime,
             supports_live_desktop=False,
-            supported_operations=self.supported_operations(),
+            runtime_mode=probe.runtime_mode,
+            runtime_override_active=probe.override_active,
+            runtime_module_path=probe.module_path,
+            runtime_version=probe.version,
+            supported_runtime_version=probe.supported_runtime_version,
+            supported_runtime=probe.supported_runtime,
+            runtime_failure_reason=probe.failure_reason,
+            supported_operations=supported_operations,
+            supported_workflows=supported_workflows_for_operations(supported_operations),
+            workflow_support=workflow_support_for_operations(supported_operations),
             notes=notes,
         )
 
@@ -139,7 +154,7 @@ class PythonAnkiBackend(BaseBackend):
         capabilities = self.backend_capabilities()
         return {
             "authenticated": credential is not None,
-            "credential_backend": "macos-keychain",
+            "credential_backend": "credential-store",
             "credential_present": credential is not None,
             "backend_available": capabilities.available,
             "supports_sync": capabilities.supported_operations.get("sync.run", False),
@@ -1139,6 +1154,50 @@ class PythonAnkiBackend(BaseBackend):
                 "deck_id": int(deck_id) if deck_id is not None else None,
                 "template": template_name,
             }
+
+    def get_card_presentation(self, collection_path: Path, card_id: int) -> dict | None:
+        resolved_path = self._resolve_collection_path(collection_path)
+        with self._open_collection(resolved_path) as collection:
+            card = None
+            for method_name in ("get_card", "getCard"):
+                candidate = getattr(collection, method_name, None)
+                if candidate is not None:
+                    card = candidate(card_id)
+                    break
+            if card is None:
+                raise CardNotFoundError(
+                    f"Card {card_id} was not found",
+                    details={"card_id": card_id},
+                )
+
+            front_html = self._extract_card_side_html(card, side="front")
+            back_html = self._extract_card_side_html(card, side="back")
+            if front_html is None and back_html is None:
+                return None
+            return {
+                "front_html": front_html,
+                "back_html": back_html,
+            }
+
+    def _extract_card_side_html(self, card: Any, *, side: str) -> str | None:
+        candidate_names = {
+            "front": ("question", "question_html"),
+            "back": ("answer", "answer_html"),
+        }[side]
+        for name in candidate_names:
+            candidate = getattr(card, name, None)
+            if candidate is None:
+                continue
+            try:
+                value = candidate() if callable(candidate) else candidate
+            except Exception:
+                continue
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return None
 
     def add_note(
         self,

@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from ankicli.app.catalog import (
+    supported_operations_for_backend,
+    supported_workflows_for_operations,
+    workflow_support_for_operations,
+)
 from ankicli.app.credentials import SyncCredential
 from ankicli.app.errors import (
     BackendOperationUnsupportedError,
@@ -19,7 +24,7 @@ from ankicli.app.errors import (
     NoteNotFoundError,
     ValidationError,
 )
-from ankicli.app.models import IMPLEMENTED_BACKEND_OPERATIONS, BackendCapabilities
+from ankicli.app.models import BackendCapabilities
 from ankicli.backends.base import BaseBackend
 
 
@@ -31,43 +36,7 @@ class AnkiConnectBackend(BaseBackend):
         self.version = version
 
     def supported_operations(self) -> dict[str, bool]:
-        supported = {operation: False for operation in IMPLEMENTED_BACKEND_OPERATIONS}
-        for operation in (
-            "doctor.backend",
-            "doctor.capabilities",
-            "backend.test_connection",
-            "collection.info",
-            "collection.stats",
-            "deck.list",
-            "deck.get",
-            "deck.stats",
-            "model.list",
-            "model.get",
-            "model.fields",
-            "model.templates",
-            "model.validate_note",
-            "tag.list",
-            "search.notes",
-            "search.cards",
-            "search.count",
-            "search.preview",
-            "export.notes",
-            "export.cards",
-            "import.notes",
-            "import.patch",
-            "note.get",
-            "note.add",
-            "note.update",
-            "note.fields",
-            "note.move_deck",
-            "note.add_tags",
-            "note.remove_tags",
-            "card.get",
-            "card.suspend",
-            "card.unsuspend",
-        ):
-            supported[operation] = True
-        return supported
+        return supported_operations_for_backend(self.name, available=True)
 
     def _raise_unsupported(self, operation: str) -> None:
         raise BackendOperationUnsupportedError(
@@ -79,16 +48,20 @@ class AnkiConnectBackend(BaseBackend):
         try:
             api_version = self._invoke("version")
         except BackendUnavailableError as exc:
+            supported_operations = self.supported_operations()
             return BackendCapabilities(
                 backend=self.name,
                 available=False,
                 supports_collection_reads=False,
                 supports_collection_writes=False,
                 supports_live_desktop=True,
-                supported_operations=self.supported_operations(),
+                supported_operations=supported_operations,
+                supported_workflows=supported_workflows_for_operations(supported_operations),
+                workflow_support=workflow_support_for_operations(supported_operations),
                 notes=[str(exc)],
             )
 
+        supported_operations = self.supported_operations()
         notes = [f"AnkiConnect API version {api_version} at {self.url}"]
         notes.append("Initial AnkiConnect slice excludes note delete.")
         notes.append("Collection-wide tag lifecycle commands are not implemented yet.")
@@ -98,7 +71,9 @@ class AnkiConnectBackend(BaseBackend):
             supports_collection_reads=True,
             supports_collection_writes=True,
             supports_live_desktop=True,
-            supported_operations=self.supported_operations(),
+            supported_operations=supported_operations,
+            supported_workflows=supported_workflows_for_operations(supported_operations),
+            workflow_support=workflow_support_for_operations(supported_operations),
             notes=notes,
         )
 
@@ -503,6 +478,10 @@ class AnkiConnectBackend(BaseBackend):
             "deck_id": deck_id,
             "template": str(template or ""),
         }
+
+    def get_card_presentation(self, collection_path: Path, card_id: int) -> dict | None:
+        del collection_path, card_id
+        return None
 
     def add_note(
         self,

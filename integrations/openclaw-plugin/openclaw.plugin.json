@@ -1,5 +1,6 @@
 {
   "id": "ankicli",
+  "skills": ["skills"],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -12,6 +13,19 @@
         "type": "string",
         "enum": ["python-anki", "ankiconnect"],
         "description": "Optional ankicli backend override."
+      },
+      "toolMode": {
+        "type": "string",
+        "enum": [
+          "llm-default",
+          "primary-only",
+          "legacy-low-level",
+          "expert-only",
+          "all",
+          "passthrough-only",
+          "curated-only"
+        ],
+        "description": "Controls whether the plugin registers the primary study-oriented surface, the legacy low-level surface, the expert passthrough, or all of them."
       },
       "collectionPath": {
         "type": "string",

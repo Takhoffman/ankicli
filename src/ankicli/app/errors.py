@@ -153,3 +153,13 @@ class ProfileNotFoundError(AnkiCliError):
 class ProfileResolutionError(AnkiCliError):
     code = "PROFILE_RESOLUTION_FAILED"
     exit_code = 29
+
+
+class StudySessionNotFoundError(AnkiCliError):
+    code = "STUDY_SESSION_NOT_FOUND"
+    exit_code = 30
+
+
+class StudySessionRequiredError(AnkiCliError):
+    code = "STUDY_SESSION_REQUIRED"
+    exit_code = 31

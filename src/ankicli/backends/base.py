@@ -252,6 +252,10 @@ class BaseBackend(ABC):
     def get_card(self, collection_path: Path, card_id: int) -> dict:
         raise NotImplementedError
 
+    def get_card_presentation(self, collection_path: Path, card_id: int) -> dict | None:
+        del collection_path, card_id
+        return None
+
     @abstractmethod
     def add_note(
         self,

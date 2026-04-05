@@ -7,6 +7,7 @@ from typing import Annotated
 import typer
 
 from ankicli import __version__
+from ankicli.app.catalog import catalog_snapshot
 from ankicli.app.errors import AnkiCliError, ValidationError
 from ankicli.app.output import (
     error_envelope,
@@ -34,6 +35,7 @@ from ankicli.app.services import (
     SyncService,
     TagService,
 )
+from ankicli.app.study import StudyService
 from ankicli.runtime import Settings, get_backend
 
 app = typer.Typer(
@@ -63,6 +65,14 @@ sync_app = typer.Typer(no_args_is_help=True, help="Inspect and run collection sy
 note_app = typer.Typer(no_args_is_help=True, help="Inspect and mutate notes.")
 card_app = typer.Typer(no_args_is_help=True, help="Inspect and mutate cards.")
 tag_app = typer.Typer(no_args_is_help=True, help="Inspect tags in a collection.")
+study_app = typer.Typer(
+    no_args_is_help=True,
+    help="Run local tutor-style study sessions over a collection.",
+)
+catalog_app = typer.Typer(
+    no_args_is_help=True,
+    help="Export the authoritative capability and workflow catalog.",
+)
 
 app.add_typer(doctor_app, name="doctor")
 app.add_typer(backend_app, name="backend")
@@ -80,6 +90,8 @@ app.add_typer(sync_app, name="sync")
 app.add_typer(note_app, name="note")
 app.add_typer(card_app, name="card")
 app.add_typer(tag_app, name="tag")
+app.add_typer(study_app, name="study")
+app.add_typer(catalog_app, name="catalog")
 
 
 def emit(
@@ -280,7 +292,7 @@ def auth_status(ctx: typer.Context) -> None:
 
 @auth_app.command(
     "login",
-    help="Log in for sync and store credentials in the OS keychain when supported.",
+    help="Log in for sync and store credentials in the supported local credential store.",
 )
 def auth_login(
     ctx: typer.Context,
@@ -1111,6 +1123,123 @@ def search_preview(
     except AnkiCliError as error:
         emit(settings, error=error)
         return
+    emit(settings, data=data)
+
+
+@study_app.command("start", help="Create a local tutor-style study session from a deck or query.")
+def study_start(
+    ctx: typer.Context,
+    deck: Annotated[str | None, typer.Option("--deck")] = None,
+    query: Annotated[str | None, typer.Option("--query")] = None,
+    scope_preset: Annotated[str, typer.Option("--scope-preset")] = "all",
+    limit: Annotated[int, typer.Option("--limit")] = 20,
+) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = StudyService(backend).start(
+            settings.collection,
+            deck=deck,
+            query=query,
+            scope_preset=scope_preset,
+            limit=limit,
+        )
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@study_app.command("next", help="Return the current or next card in the active study session.")
+def study_next(
+    ctx: typer.Context,
+    session_id: Annotated[str | None, typer.Option("--session-id")] = None,
+) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = StudyService(backend).next(session_id=session_id)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@study_app.command("details", help="Return the current study card details from the front side.")
+def study_details(
+    ctx: typer.Context,
+    session_id: Annotated[str | None, typer.Option("--session-id")] = None,
+) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = StudyService(backend).details(session_id=session_id)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@study_app.command("reveal", help="Reveal the answer for the current study card.")
+def study_reveal(
+    ctx: typer.Context,
+    session_id: Annotated[str | None, typer.Option("--session-id")] = None,
+) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = StudyService(backend).reveal(session_id=session_id)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@study_app.command("grade", help="Record a local study grade and advance the session.")
+def study_grade(
+    ctx: typer.Context,
+    rating: Annotated[str, typer.Option("--rating")],
+    session_id: Annotated[str | None, typer.Option("--session-id")] = None,
+) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = StudyService(backend).grade(session_id=session_id, rating=rating)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@study_app.command("summary", help="Summarize the active study session.")
+def study_summary(
+    ctx: typer.Context,
+    session_id: Annotated[str | None, typer.Option("--session-id")] = None,
+) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    try:
+        data = StudyService(backend).summary(session_id=session_id)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@catalog_app.command("export", help="Export operation/workflow metadata plus runtime support.")
+def catalog_export(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    backend = get_backend(settings.backend_name)
+    capabilities = backend.backend_capabilities().model_dump()
+    data = {
+        **catalog_snapshot(),
+        "backend": backend.name,
+        "available": capabilities["available"],
+        "supported_operations": capabilities["supported_operations"],
+        "supported_workflows": capabilities["supported_workflows"],
+        "workflow_support": capabilities["workflow_support"],
+        "notes": capabilities["notes"],
+    }
     emit(settings, data=data)
 
 
