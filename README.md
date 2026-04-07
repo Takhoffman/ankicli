@@ -1,5 +1,7 @@
 # ankicli
 
+![ankicli hero](docs/images/ankicli-hero.png)
+
 `ankicli` is a local-first, automation-grade CLI for inspecting and mutating Anki collections.
 
 Supported platforms are macOS, Windows, and Linux. Product-complete support means the default
