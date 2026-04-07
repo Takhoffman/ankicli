@@ -1,0 +1,13 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { installerScripts } from "../../lib/install";
+---
+
+<BaseLayout title="Install ankicli on Windows">
+  <p class="eyebrow">Windows install</p>
+  <h1>Install ankicli on Windows</h1>
+  <pre><code>{`irm ${installerScripts.powershell} | iex`}</code></pre>
+  <p>The PowerShell installer downloads the Windows x64 standalone ZIP, verifies its checksum, and installs <code>ankicli.exe</code> into <code>%LOCALAPPDATA%\Programs\ankicli</code>.</p>
+  <pre><code>ankicli --version
+ankicli --json doctor backend</code></pre>
+</BaseLayout>

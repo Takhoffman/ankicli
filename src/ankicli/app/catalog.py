@@ -384,7 +384,9 @@ WORKFLOW_SPECS: tuple[WorkflowSpec, ...] = (
     WorkflowSpec(
         id="study.details",
         label="Study Card Details",
-        description="Return the current study card details from the front side of the active session.",
+        description=(
+            "Return the current study card details from the front side of the active session."
+        ),
         kind="primary",
         visibility=SURFACE_PRIMARY,
         required_operations=("search.cards", "card.get", "note.get"),
@@ -693,7 +695,9 @@ PLUGIN_TOOL_SPECS: tuple[PluginToolSpec, ...] = (
     PluginToolSpec(
         name="anki_study_card_details",
         label="Anki Study Card Details",
-        description="Return the current study card details from the front side of the active session.",
+        description=(
+            "Return the current study card details from the front side of the active session."
+        ),
         surface=SURFACE_PRIMARY,
         workflow_id="study.details",
         parameter_schema=object_schema({"sessionId": {"type": "string"}}),
@@ -960,7 +964,10 @@ SKILL_SPECS: tuple[SkillSpec, ...] = (
         anti_patterns=(
             "Do not default to low-level tools when the user asked to study.",
             "Do not mutate notes or decks unless explicitly asked.",
-            "Do not skip anki_study_reveal when the user asks for the answer or when grading requires a revealed card.",
+            (
+                "Do not skip anki_study_reveal when the user asks for the answer "
+                "or when grading requires a revealed card."
+            ),
         ),
     ),
     SkillSpec(

@@ -1,0 +1,13 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="ankicli quickstart">
+  <p class="eyebrow">Docs</p>
+  <h1>Quickstart</h1>
+  <p>Start with platform install, then verify the runtime before touching a real collection.</p>
+  <pre><code>ankicli --json doctor env
+ankicli --json doctor backend
+ankicli --json profile list
+ankicli --json --profile "User 1" collection info</code></pre>
+</BaseLayout>

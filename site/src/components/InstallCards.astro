@@ -1,0 +1,80 @@
+---
+import { platformCards } from "../lib/install";
+
+const { showManual = true } = Astro.props;
+---
+
+<div class="grid">
+  {platformCards.map((platform) => (
+    <section class="card install-card">
+      <div class="platform-head">
+        <div>
+          <p class="eyebrow">{platform.label}</p>
+          <h3>One-command install</h3>
+        </div>
+        <button class="copy-button" data-copy={platform.installCommand}>Copy</button>
+      </div>
+      <pre><code>{platform.installCommand}</code></pre>
+      <p>Verify:</p>
+      <pre><code>{platform.verifyCommand}</code></pre>
+      {showManual && (
+        <>
+          <p>Manual fallback:</p>
+          <pre><code>{platform.manualCommand}</code></pre>
+        </>
+      )}
+    </section>
+  ))}
+</div>
+
+<script>
+  document.querySelectorAll(".copy-button").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const text = button.getAttribute("data-copy") ?? "";
+      try {
+        await navigator.clipboard.writeText(text);
+        const original = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => {
+          button.textContent = original;
+        }, 1400);
+      } catch {
+        button.textContent = "Copy failed";
+      }
+    });
+  });
+</script>
+
+<style>
+  .grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .install-card {
+    padding: 1.35rem;
+  }
+
+  .platform-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .copy-button {
+    appearance: none;
+    border: 0;
+    border-radius: 999px;
+    padding: 0.7rem 1rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--pink), #ff8e64);
+    color: #130912;
+    cursor: pointer;
+  }
+
+  p {
+    margin: 1rem 0 0.4rem;
+  }
+</style>

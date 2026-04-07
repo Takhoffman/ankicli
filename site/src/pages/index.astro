@@ -1,0 +1,149 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import InstallCards from "../components/InstallCards.astro";
+import { issuesUrl, releasesUrl, repoUrl } from "../lib/install";
+const baseUrl = import.meta.env.BASE_URL;
+---
+
+<BaseLayout title="ankicli | Learn smart from your terminal">
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Terminal-first Anki workflow</p>
+      <h1>Manage cards, sync collections, and study without leaving your shell.</h1>
+      <p>
+        ankicli is a local-first, automation-grade Anki CLI for semi-technical users who want a
+        real product, not a pile of setup steps.
+      </p>
+      <div class="hero-actions">
+        <a class="primary" href={`${baseUrl}install`}>Install ankicli</a>
+        <a class="secondary" href={`${baseUrl}docs/quickstart`}>Read the quickstart</a>
+      </div>
+      <div class="hero-links">
+        <a href={releasesUrl}>Releases</a>
+        <a href={repoUrl}>Source</a>
+        <a href={issuesUrl}>Issues</a>
+      </div>
+    </div>
+    <div class="hero-art card">
+      <img src={`${baseUrl}ankicli-hero.png`} alt="ankicli hero art" />
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Install</p>
+        <h2>Copy one command for your platform</h2>
+      </div>
+      <p>The scripts download a standalone release artifact, install it to a user-local path, verify checksums, and run a post-install health check.</p>
+    </div>
+    <InstallCards />
+  </section>
+
+  <section class="docs-grid section">
+    <a class="card link-card" href={`${baseUrl}docs/profiles-and-collections`}>
+      <h3>Profiles and collections</h3>
+      <p>Use profile-aware commands or point directly at a collection file.</p>
+    </a>
+    <a class="card link-card" href={`${baseUrl}docs/sync-and-backups`}>
+      <h3>Sync and backups</h3>
+      <p>Safe preflight, stored credentials, and local backup recovery flows.</p>
+    </a>
+    <a class="card link-card" href={`${baseUrl}docs/study`}>
+      <h3>Study mode</h3>
+      <p>Run local tutor-style sessions without turning the CLI into a fragile TUI.</p>
+    </a>
+    <a class="card link-card" href={`${baseUrl}docs/troubleshooting`}>
+      <h3>Troubleshooting</h3>
+      <p>Debug install issues, runtime validation failures, and profile resolution problems.</p>
+    </a>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Verify</p>
+        <h2>Health check after install</h2>
+      </div>
+    </div>
+    <div class="card verify">
+      <pre><code>ankicli --version
+ankicli --json doctor env
+ankicli --json doctor backend</code></pre>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .hero {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: 1.15fr 0.85fr;
+    align-items: center;
+    margin-bottom: 3rem;
+  }
+  .hero-copy h1 {
+    margin-top: 0.5rem;
+    font-size: clamp(2.6rem, 5vw, 5rem);
+  }
+  .hero-actions, .hero-links {
+    display: flex;
+    gap: 0.9rem;
+    flex-wrap: wrap;
+    margin-top: 1.2rem;
+  }
+  .primary, .secondary, .link-card {
+    text-decoration: none;
+  }
+  .primary, .secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3rem;
+    padding: 0.9rem 1.2rem;
+    border-radius: 999px;
+    font-weight: 700;
+  }
+  .primary {
+    color: #081014;
+    background: linear-gradient(135deg, var(--lime), #d3ff6c);
+  }
+  .secondary {
+    border: 1px solid var(--line);
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .hero-links a { color: var(--muted); }
+  .hero-art { padding: 1rem; }
+  .hero-art img {
+    width: 100%;
+    display: block;
+    border-radius: 1rem;
+  }
+  .section {
+    margin-top: 2rem;
+  }
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .link-card {
+    display: block;
+    padding: 1.25rem;
+  }
+  .verify {
+    padding: 1rem;
+  }
+  @media (max-width: 900px) {
+    .hero {
+      grid-template-columns: 1fr;
+    }
+    .section-head {
+      flex-direction: column;
+      align-items: start;
+    }
+  }
+</style>

@@ -1,0 +1,13 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Profiles and collections">
+  <p class="eyebrow">Docs</p>
+  <h1>Profiles and collections</h1>
+  <p>Use <code>--profile</code> for the normal local-user path and <code>--collection</code> when you need exact file targeting.</p>
+  <pre><code>ankicli --json profile list
+ankicli --json profile default
+ankicli --json --profile "User 1" collection info
+ankicli --json --collection /path/to/collection.anki2 collection info</code></pre>
+</BaseLayout>

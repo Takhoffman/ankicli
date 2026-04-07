@@ -9,3 +9,6 @@ dist/
 build/
 .worktrees/
 *.swp
+site/node_modules/
+site/dist/
+site/.astro/

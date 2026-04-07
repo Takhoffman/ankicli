@@ -1,0 +1,15 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import InstallCards from "../../components/InstallCards.astro";
+---
+
+<BaseLayout title="Install ankicli">
+  <p class="eyebrow">Install</p>
+  <h1>Pick your platform and run one command.</h1>
+  <p>
+    The first-party installer scripts download a standalone release artifact from GitHub Releases,
+    verify checksums, install to a user-local path, and run a post-install backend check.
+  </p>
+
+  <InstallCards />
+</BaseLayout>

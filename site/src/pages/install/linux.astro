@@ -1,0 +1,13 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { installerScripts } from "../../lib/install";
+---
+
+<BaseLayout title="Install ankicli on Linux">
+  <p class="eyebrow">Linux install</p>
+  <h1>Install ankicli on Linux</h1>
+  <pre><code>{`curl -fsSL ${installerScripts.shell} | sh`}</code></pre>
+  <p>The installer downloads the Linux x64 standalone archive, verifies its checksum, and installs <code>ankicli</code> into <code>~/.local/bin</code>.</p>
+  <pre><code>ankicli --version
+ankicli --json doctor backend</code></pre>
+</BaseLayout>

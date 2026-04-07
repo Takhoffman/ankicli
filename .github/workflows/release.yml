@@ -1,0 +1,59 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-x64
+            runs-on: macos-13
+          - target: darwin-arm64
+            runs-on: macos-14
+          - target: linux-x64
+            runs-on: ubuntu-latest
+          - target: windows-x64
+            runs-on: windows-latest
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+      - name: Install build deps
+        run: uv sync --extra dev --frozen
+      - name: Build standalone artifact
+        shell: bash
+        run: uv run python scripts/build_release_artifact.py --target ${{ matrix.target }} --version "${GITHUB_REF_NAME#v}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/release/*
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          pattern: release-*
+          merge-multiple: true
+      - name: Consolidate checksums
+        run: |
+          mkdir -p release-final
+          find release-artifacts -type f ! -name '*checksums.txt' -exec cp {} release-final/ \;
+          cat release-artifacts/*checksums.txt > release-final/ankicli-${GITHUB_REF_NAME#v}-checksums.txt
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-final/* --generate-notes --verify-tag

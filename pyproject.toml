@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "PyInstaller>=6.13,<7",
   "PyYAML>=6,<7",
   "pytest>=8.3,<9",
   "ruff>=0.11,<0.12",
