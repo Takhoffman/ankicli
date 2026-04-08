@@ -1,13 +1,9 @@
 ---
+import DocsPage from "../../components/DocsPage.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import { docsPages } from "../../lib/docs";
 ---
 
 <BaseLayout title="Study mode">
-  <p class="eyebrow">Docs</p>
-  <h1>Study mode</h1>
-  <p>Study sessions are local tutor-style flows layered on collection reads. They do not write Anki grades back to the collection.</p>
-  <pre><code>ankicli --json --profile "User 1" study start --deck Default
-ankicli --json study next
-ankicli --json study reveal
-ankicli --json study grade --rating good</code></pre>
+  <DocsPage page={docsPages.study} />
 </BaseLayout>

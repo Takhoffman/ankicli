@@ -1,13 +1,9 @@
 ---
+import DocsPage from "../../components/DocsPage.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import { installerScripts } from "../../lib/install";
+import { docsPages } from "../../lib/docs";
 ---
 
 <BaseLayout title="Install ankicli on macOS">
-  <p class="eyebrow">macOS install</p>
-  <h1>Install ankicli on macOS</h1>
-  <pre><code>{`curl -fsSL ${installerScripts.shell} | sh`}</code></pre>
-  <p>The installer picks the correct macOS release artifact for Apple Silicon or Intel and installs <code>ankicli</code> into <code>~/.local/bin</code>.</p>
-  <pre><code>ankicli --version
-ankicli --json doctor backend</code></pre>
+  <DocsPage page={docsPages["install-macos"]} />
 </BaseLayout>

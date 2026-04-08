@@ -1,13 +1,9 @@
 ---
+import DocsPage from "../../components/DocsPage.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import { docsPages } from "../../lib/docs";
 ---
 
 <BaseLayout title="Sync and backups">
-  <p class="eyebrow">Docs</p>
-  <h1>Sync and backups</h1>
-  <p>Use sync preflight before a real sync, and treat backups as local rollback rather than remote replication.</p>
-  <pre><code>ankicli --json auth status
-ankicli --json auth login --username your-user --password-env ANKICLI_PASSWORD
-ankicli --json --profile "User 1" sync status
-ankicli --json --profile "User 1" backup create</code></pre>
+  <DocsPage page={docsPages["sync-and-backups"]} />
 </BaseLayout>

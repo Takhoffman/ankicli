@@ -1,13 +1,9 @@
 ---
+import DocsPage from "../../components/DocsPage.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import { docsPages } from "../../lib/docs";
 ---
 
 <BaseLayout title="Troubleshooting">
-  <p class="eyebrow">Docs</p>
-  <h1>Troubleshooting</h1>
-  <p>If install or runtime validation fails, inspect environment, backend support, and the resolved profile root first.</p>
-  <pre><code>ankicli --json doctor env
-ankicli --json doctor backend
-ankicli --json doctor capabilities
-ankicli --json profile resolve --name "User 1"</code></pre>
+  <DocsPage page={docsPages.troubleshooting} />
 </BaseLayout>

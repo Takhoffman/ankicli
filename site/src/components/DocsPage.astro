@@ -1,0 +1,355 @@
+---
+import type { DocPage } from "../lib/docs";
+import { pageMarkdown } from "../lib/docs";
+
+const { page } = Astro.props as { page: DocPage };
+const markdown = pageMarkdown(page);
+---
+
+<section class="doc-shell">
+  <div class="doc-hero card">
+    <div class="hero-glow hero-glow-lime"></div>
+    <div class="hero-glow hero-glow-pink"></div>
+    <div class="hero-copy">
+      <p class="eyebrow">{page.eyebrow}</p>
+      <h1>{page.title}</h1>
+      <p class="lede">{page.summary}</p>
+    </div>
+    <div class="hero-side">
+      <div class="hero-side-card">
+        <h2 class="side-title">Copy this guide</h2>
+        <p class="side-copy">Paste it into Claude, Codex, or OpenClaw for structured context.</p>
+        <button class="copy-button" data-copy={markdown}>Copy Page</button>
+        <p class="copy-helper">{page.helper}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="docs-grid callout-grid">
+    <section class="card callout callout-lime">
+      <h2>When to use this</h2>
+      <ul>
+        {page.whenToUse.map((item) => <li>{item}</li>)}
+      </ul>
+    </section>
+    <section class="card callout callout-pink">
+      <h2>What the agent should know</h2>
+      <ul>
+        {page.agentShouldKnow.map((item) => <li>{item}</li>)}
+      </ul>
+    </section>
+  </div>
+
+  <div class="sections">
+    {page.sections.map((section) => (
+      <section class="card doc-section">
+        <h2>{section.heading}</h2>
+        {section.body.map((paragraph) => <p>{paragraph}</p>)}
+        {section.bullets && (
+          <ul>
+            {section.bullets.map((item) => <li>{item}</li>)}
+          </ul>
+        )}
+        {section.commands &&
+          section.commands.map((command) => (
+            <div
+              class:list={[
+                "command-block",
+                command.label.startsWith("Prompt for") ? "command-block-prompt" : "command-block-shell",
+              ]}
+            >
+              <div class="command-head">
+                <h3>{command.label}</h3>
+                <button class="copy-button copy-button-small" data-copy={command.body}>Copy Command</button>
+              </div>
+              <pre><code>{command.body}</code></pre>
+            </div>
+          ))}
+      </section>
+    ))}
+  </div>
+</section>
+
+<script>
+  document.querySelectorAll(".copy-button").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const text = button.getAttribute("data-copy") ?? "";
+      try {
+        await navigator.clipboard.writeText(text);
+        const original = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => {
+          button.textContent = original;
+        }, 1400);
+      } catch {
+        button.textContent = "Copy failed";
+      }
+    });
+  });
+</script>
+
+<style>
+  .doc-shell {
+    display: grid;
+    gap: 1.75rem;
+  }
+
+  .doc-hero {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+    padding: 2rem;
+    background:
+      linear-gradient(145deg, rgba(8, 16, 36, 0.96), rgba(12, 19, 44, 0.9)),
+      radial-gradient(circle at top left, rgba(156, 255, 79, 0.1), transparent 32%),
+      radial-gradient(circle at bottom right, rgba(255, 86, 207, 0.12), transparent 34%);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .hero-copy,
+  .hero-side {
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-copy h1 {
+    margin-top: 0.5rem;
+    font-size: clamp(2.3rem, 5vw, 4.6rem);
+  }
+
+  .lede {
+    max-width: 60ch;
+    margin-top: 1rem;
+    font-size: 1.08rem;
+  }
+
+  .hero-side {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .hero-side-card {
+    width: 100%;
+    display: grid;
+    align-content: start;
+    gap: 0.9rem;
+    padding: 1.15rem;
+    border-radius: 1.2rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
+      rgba(5, 8, 22, 0.55);
+  }
+
+  .side-title {
+    margin: 0;
+    color: var(--text);
+    font-size: 1.15rem;
+    font-weight: 800;
+  }
+
+  .side-copy {
+    margin: -0.1rem 0 0;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .copy-helper {
+    margin: 0;
+    font-size: 0.94rem;
+  }
+
+  .hero-glow {
+    position: absolute;
+    width: 16rem;
+    height: 16rem;
+    border-radius: 999px;
+    filter: blur(18px);
+    opacity: 0.28;
+    pointer-events: none;
+  }
+
+  .hero-glow-lime {
+    top: -5rem;
+    left: -4rem;
+    background: radial-gradient(circle, rgba(156, 255, 79, 0.9), transparent 62%);
+  }
+
+  .hero-glow-pink {
+    right: -4rem;
+    bottom: -6rem;
+    background: radial-gradient(circle, rgba(255, 86, 207, 0.9), transparent 60%);
+  }
+
+  .callout-grid {
+    align-items: stretch;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .callout {
+    padding: 1.15rem 1.2rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.02)),
+      rgba(7, 12, 29, 0.85);
+  }
+
+  .callout h2 {
+    margin-bottom: 0.75rem;
+    font-size: 1.4rem;
+  }
+
+  .callout-lime {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 0 0 1px rgba(156, 255, 79, 0.12);
+  }
+
+  .callout-pink {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 0 0 1px rgba(255, 86, 207, 0.14);
+  }
+
+  .sections {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .doc-section {
+    position: relative;
+    overflow: hidden;
+    padding: 1.25rem 1.3rem 1.35rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
+      rgba(8, 14, 33, 0.92);
+  }
+
+  .doc-section::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--lime), var(--pink));
+    opacity: 0.9;
+  }
+
+  .doc-section h2 {
+    margin-bottom: 0.7rem;
+    font-size: clamp(1.7rem, 2.3vw, 2.3rem);
+  }
+
+  .doc-section p:first-of-type {
+    margin-top: 0.1rem;
+  }
+
+  .command-block + .command-block {
+    margin-top: 1.2rem;
+  }
+
+  .command-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.7rem;
+  }
+
+  .command-block {
+    margin-top: 1rem;
+    padding: 0.95rem;
+    border-radius: 1.1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02)),
+      rgba(4, 7, 18, 0.82);
+  }
+
+  .command-block pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .command-block-shell pre {
+    font-size: 0.96rem;
+  }
+
+  .command-block-prompt {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
+      linear-gradient(135deg, rgba(255, 224, 93, 0.04), rgba(255, 86, 207, 0.03)),
+      rgba(6, 9, 20, 0.88);
+  }
+
+  .command-block-prompt pre {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: var(--text);
+    font-size: 1rem;
+    line-height: 1.4;
+    font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .command-block-prompt .command-head h3 {
+    color: #ffd857;
+  }
+
+  .command-head h3 {
+    color: var(--yellow);
+  }
+
+  .doc-section p,
+  .doc-section ul,
+  .callout ul {
+    max-width: 74ch;
+  }
+
+  ul {
+    color: var(--muted);
+    line-height: 1.65;
+  }
+
+  .copy-button {
+    appearance: none;
+    border: 0;
+    border-radius: 999px;
+    padding: 0.7rem 1rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--pink), #ff8e64);
+    color: #130912;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .copy-button:hover {
+    filter: brightness(1.05);
+  }
+
+  .copy-button-small {
+    min-height: 2.7rem;
+    padding: 0.65rem 0.95rem;
+    font-size: 0.95rem;
+  }
+
+  @media (min-width: 761px) {
+    .sections {
+      max-width: 72rem;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .doc-hero,
+    .callout-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .command-head {
+      flex-direction: column;
+      align-items: start;
+    }
+  }
+</style>

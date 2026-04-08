@@ -3,20 +3,27 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import InstallCards from "../components/InstallCards.astro";
 import { issuesUrl, releasesUrl, repoUrl } from "../lib/install";
 const baseUrl = import.meta.env.BASE_URL;
+const basePath = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+const withBase = (path: string) => new URL(path, `https://takhoffman.github.io${basePath}`).pathname;
 ---
 
 <BaseLayout title="ankicli | Learn smart from your terminal">
   <section class="hero">
     <div class="hero-copy">
-      <p class="eyebrow">Terminal-first Anki workflow</p>
-      <h1>Manage cards, sync collections, and study without leaving your shell.</h1>
+      <p class="eyebrow">Install it. verify it. hand it to your agent.</p>
+      <h1>Put a safe, scriptable Anki control surface in front of your agent harness.</h1>
       <p>
-        ankicli is a local-first, automation-grade Anki CLI for semi-technical users who want a
-        real product, not a pile of setup steps.
+        ankicli is a local-first Anki CLI for smart, semi-technical operators who want a real
+        product they can install once, verify quickly, and then hand off to Claude, Codex,
+        OpenClaw, or their own scripts.
+      </p>
+      <p class="operator-note">
+        Installed by humans. Operated by agents. Supervised with explicit JSON output, dry-run
+        support, and safety-first write flows.
       </p>
       <div class="hero-actions">
-        <a class="primary" href={`${baseUrl}install`}>Install ankicli</a>
-        <a class="secondary" href={`${baseUrl}docs/quickstart`}>Read the quickstart</a>
+        <a class="primary" href={withBase("install")}>Install ankicli</a>
+        <a class="secondary" href={withBase("docs/quickstart")}>Read the quickstart</a>
       </div>
       <div class="hero-links">
         <a href={releasesUrl}>Releases</a>
@@ -25,7 +32,7 @@ const baseUrl = import.meta.env.BASE_URL;
       </div>
     </div>
     <div class="hero-art card">
-      <img src={`${baseUrl}ankicli-hero.png`} alt="ankicli hero art" />
+      <img src={withBase("ankicli-hero.png")} alt="ankicli hero art" />
     </div>
   </section>
 
@@ -35,25 +42,64 @@ const baseUrl = import.meta.env.BASE_URL;
         <p class="eyebrow">Install</p>
         <h2>Copy one command for your platform</h2>
       </div>
-      <p>The scripts download a standalone release artifact, install it to a user-local path, verify checksums, and run a post-install health check.</p>
+      <p>The first-party installers download standalone release artifacts, verify checksums, install to a user-local path, and run a post-install health check.</p>
     </div>
     <InstallCards />
   </section>
 
+  <section class="section workflow">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Workflow</p>
+        <h2>How ankicli fits into a real operator workflow</h2>
+      </div>
+    </div>
+    <div class="docs-grid">
+      <div class="card link-card">
+        <h3>1. Install and verify as a human</h3>
+        <p>Run the platform installer, confirm the runtime is healthy, and resolve the right Anki profile before any real collection work.</p>
+      </div>
+      <div class="card link-card">
+        <h3>2. Hand stable docs to your agent</h3>
+        <p>Use the docs pages and their Copy Page buttons to paste structured context directly into Claude, Codex, or OpenClaw.</p>
+      </div>
+      <div class="card link-card">
+        <h3>3. Let the agent operate safely</h3>
+        <p>Use JSON output, dry-run-first mutation flows, explicit confirms, backups, and sync preflight instead of ad hoc terminal hacks.</p>
+      </div>
+    </div>
+  </section>
+
   <section class="docs-grid section">
-    <a class="card link-card" href={`${baseUrl}docs/profiles-and-collections`}>
+    <a class="card link-card" href={withBase("docs/learning-plans")}>
+      <h3>Learning plans</h3>
+      <p>Goal-driven study for travel, anime immersion, medical exams, and time-bounded progress.</p>
+    </a>
+    <a class="card link-card" href={withBase("docs/recipes")}>
+      <h3>Recipes</h3>
+      <p>Mechanics for image generation, TTS enrichment, source-to-deck workflows, and repair flows.</p>
+    </a>
+    <a class="card link-card" href={withBase("docs/cli-guide")}>
+      <h3>CLI guide</h3>
+      <p>Command shape, targeting flags, help output, JSON mode, and safety switches.</p>
+    </a>
+    <a class="card link-card" href={withBase("docs/common-tasks")}>
+      <h3>Common tasks</h3>
+      <p>Exact commands for inspection, search, note changes, backup, sync, and study.</p>
+    </a>
+    <a class="card link-card" href={withBase("docs/profiles-and-collections")}>
       <h3>Profiles and collections</h3>
       <p>Use profile-aware commands or point directly at a collection file.</p>
     </a>
-    <a class="card link-card" href={`${baseUrl}docs/sync-and-backups`}>
+    <a class="card link-card" href={withBase("docs/sync-and-backups")}>
       <h3>Sync and backups</h3>
       <p>Safe preflight, stored credentials, and local backup recovery flows.</p>
     </a>
-    <a class="card link-card" href={`${baseUrl}docs/study`}>
+    <a class="card link-card" href={withBase("docs/study")}>
       <h3>Study mode</h3>
       <p>Run local tutor-style sessions without turning the CLI into a fragile TUI.</p>
     </a>
-    <a class="card link-card" href={`${baseUrl}docs/troubleshooting`}>
+    <a class="card link-card" href={withBase("docs/troubleshooting")}>
       <h3>Troubleshooting</h3>
       <p>Debug install issues, runtime validation failures, and profile resolution problems.</p>
     </a>
@@ -91,6 +137,9 @@ ankicli --json doctor backend</code></pre>
     gap: 0.9rem;
     flex-wrap: wrap;
     margin-top: 1.2rem;
+  }
+  .operator-note {
+    max-width: 60ch;
   }
   .primary, .secondary, .link-card {
     text-decoration: none;
@@ -133,6 +182,9 @@ ankicli --json doctor backend</code></pre>
   .link-card {
     display: block;
     padding: 1.25rem;
+  }
+  .workflow .link-card {
+    text-decoration: none;
   }
   .verify {
     padding: 1rem;
