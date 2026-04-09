@@ -31,7 +31,7 @@ def _run(
 
 @pytest.mark.distribution
 def test_built_wheel_installs_and_exposes_cli() -> None:
-    wheels = sorted(DIST_DIR.glob("ankicli-*.whl"))
+    wheels = sorted(DIST_DIR.glob("anki_agent_toolkit-*.whl"))
     assert wheels, "run `uv build` before executing distribution tests"
 
     wheel = wheels[-1]

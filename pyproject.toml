@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ankicli"
+name = "anki-agent-toolkit"
 version = "0.1.0"
 description = "Local-first, automation-grade Anki collection management CLI"
 readme = "README.md"
