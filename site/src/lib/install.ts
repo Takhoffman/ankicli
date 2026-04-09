@@ -24,20 +24,20 @@ export const platformCards: PlatformCard[] = [
     label: "macOS",
     installCommand: `curl -fsSL ${installerScripts.shell} | sh`,
     verifyCommand: "ankicli --version\nankicli --json doctor backend",
-    manualCommand: "pipx install ankicli",
+    manualCommand: "pipx install anki-agent-toolkit",
   },
   {
     id: "linux",
     label: "Linux",
     installCommand: `curl -fsSL ${installerScripts.shell} | sh`,
     verifyCommand: "ankicli --version\nankicli --json doctor backend",
-    manualCommand: "pipx install ankicli",
+    manualCommand: "pipx install anki-agent-toolkit",
   },
   {
     id: "windows",
     label: "Windows",
     installCommand: `irm ${installerScripts.powershell} | iex`,
     verifyCommand: "ankicli --version\r\nankicli --json doctor backend",
-    manualCommand: "pipx install ankicli",
+    manualCommand: "pipx install anki-agent-toolkit",
   },
 ];

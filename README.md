@@ -44,8 +44,10 @@ irm https://raw.githubusercontent.com/Takhoffman/ankicli/main/scripts/install.ps
 Fallback package path:
 
 ```bash
-pipx install ankicli
+pipx install anki-agent-toolkit
 ```
+
+The PyPI distribution is `anki-agent-toolkit`; the installed command is still `ankicli`.
 
 ## Verify
 

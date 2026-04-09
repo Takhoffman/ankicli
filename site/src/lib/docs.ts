@@ -1076,8 +1076,11 @@ export const docsPages: Record<string, DocPage> = {
       },
       {
         heading: "Fallback path",
-        body: ["If you explicitly want the Python package path instead of the standalone artifact path, use pipx."],
-        commands: [{ label: "Fallback", body: "pipx install ankicli" }],
+        body: [
+          "If you explicitly want the Python package path instead of the standalone artifact path, use pipx.",
+          "The PyPI distribution is `anki-agent-toolkit`; the installed command is still `ankicli`.",
+        ],
+        commands: [{ label: "Fallback", body: "pipx install anki-agent-toolkit" }],
       },
       {
         heading: "Verify after install",
@@ -1098,7 +1101,7 @@ export const docsPages: Record<string, DocPage> = {
         bullets: [
           "Confirm the machine can reach GitHub Releases and raw GitHub content.",
           "If the binary is installed but not found, add the printed user-local install directory to PATH and retry.",
-          "If the standalone installer path is blocked, use `pipx install ankicli` as the fallback path.",
+          "If the standalone installer path is blocked, use `pipx install anki-agent-toolkit` as the fallback path.",
         ],
       },
     ],
@@ -1158,7 +1161,7 @@ export const docsPages: Record<string, DocPage> = {
         body: ["The installer avoids `sudo` and prints PATH guidance when the operator needs to add the binary directory manually."],
         bullets: [
           "Treat checksum mismatch as a release-blocking problem.",
-          "Keep `pipx install ankicli` as fallback, not the default path.",
+          "Keep `pipx install anki-agent-toolkit` as fallback, not the default path.",
         ],
       },
     ],
