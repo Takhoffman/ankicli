@@ -1,4 +1,4 @@
-import { installerScripts, platformCards } from "./install";
+import { installerScripts, platformCards, rawBaseUrl } from "./install";
 
 export type CommandBlock = {
   label: string;
@@ -25,6 +25,112 @@ export type DocPage = {
 const verifyBlock = "ankicli --version\nankicli --json doctor env\nankicli --json doctor backend";
 const cliHelpBlock =
   "ankicli --help\nankicli profile --help\nankicli search --help\nankicli note --help\nankicli backup --help\nankicli sync --help\nankicli study --help";
+const publicSkillBase = `${rawBaseUrl}/skills`;
+
+function skillUrl(skillId: string): string {
+  return `${publicSkillBase}/${skillId}/SKILL.md`;
+}
+
+function codexSkillInstallBlock(skillId: string): string {
+  return `mkdir -p ~/.codex/skills/${skillId}\ncurl -fsSL ${skillUrl(skillId)} -o ~/.codex/skills/${skillId}/SKILL.md`;
+}
+
+function codexSkillInstallBlockWindows(skillId: string): string {
+  return `New-Item -ItemType Directory -Force \"$HOME/.codex/skills/${skillId}\" | Out-Null\nInvoke-WebRequest ${skillUrl(skillId)} -OutFile \"$HOME/.codex/skills/${skillId}/SKILL.md\"`;
+}
+
+const collectionSkillBody = `---
+name: ankicli-collection-management
+description: Teach the agent how to inspect and manage collection and deck state through ankicli.
+---
+
+Read first, dry-run deck writes when supported, and re-verify after mutation.
+
+Prefer:
+
+- \`ankicli --json ... collection info\`
+- \`ankicli --json ... deck list\`
+- \`ankicli --json ... deck stats --name <deck>\`
+- \`ankicli --json ... search preview --kind notes --query 'deck:<deck>'\`
+
+## Rules
+
+1. Inspect collection and deck state before mutating.
+2. Keep deck operations narrowly scoped.
+3. Re-run deck or collection reads after successful writes.
+4. For deck create, rename, delete, or reparent operations, use \`--dry-run\` or \`--yes\` as required and explain backend support gaps before attempting the mutation.`;
+
+const authoringSkillBody = `---
+name: ankicli-note-authoring
+description: Teach the agent how to add, inspect, update, and retag notes safely through ankicli.
+---
+
+Find the target note first, validate structure mentally, and re-read after writes.
+
+Prefer:
+
+- \`ankicli --json ... search preview --kind notes --query ...\`
+- \`ankicli --json ... note add ...\`
+- \`ankicli --json ... note update ...\`
+- \`ankicli --json ... note add-tags ...\`
+
+## Rules
+
+1. Search or inspect before mutating an existing note.
+2. Use \`--dry-run\` for adds, updates, retagging, deletes, and moves when available.
+3. Treat deletes and broad retagging as explicit user intent only.
+4. Re-read the note or preview the target set after successful writes so the operator can verify the final state.`;
+
+const studySkillBody = `---
+name: ankicli-study
+description: Teach the agent how to run tutor-style Anki study sessions through ankicli.
+---
+
+Use the primary study workflows first and keep tutoring separate from collection mutation.
+
+Prefer:
+
+- \`ankicli --json ... collection info\`
+- \`ankicli --json ... study start ...\`
+- \`ankicli --json study details\`
+- \`ankicli --json study reveal\`
+- \`ankicli --json study grade --rating ...\`
+- \`ankicli --json study summary\`
+
+## Rules
+
+1. Start with the narrowest deck or query scope that matches the learner goal.
+2. Use \`study details\` as the default current-card read for the front side, and use \`study reveal\` when the user asks for the answer or back side.
+3. Present study cards like Anki by default: focus on the prompt and front-side clues first, and do not volunteer the answer until after \`study reveal\`.
+4. Present grading choices in this order when guiding the learner: 1. Again 2. Hard 3. Good 4. Easy.
+5. Treat study-session state as the tutoring source of truth unless the workflow explicitly says it writes back to Anki.
+6. Explain misses in study terms and patterns instead of dumping raw database fields.
+
+## Anti-Patterns
+
+- Do not default to low-level note or deck mutations when the user asked to study.
+- Do not skip \`study reveal\` when the user asks for the answer or when grading requires a revealed card.`;
+
+const diagnosticsSkillBody = `---
+name: ankicli-diagnostics
+description: Teach the agent how to diagnose ankicli runtime, backend, collection, and capability issues.
+---
+
+Treat structured ankicli errors as authoritative and distinguish setup problems from unsupported behavior.
+
+Prefer:
+
+- \`ankicli --json doctor env\`
+- \`ankicli --json doctor backend\`
+- \`ankicli --json doctor capabilities\`
+- \`ankicli --json ... collection info\`
+
+## Rules
+
+1. Confirm runtime, backend, and collection readiness first.
+2. Differentiate missing setup from backend operation support gaps.
+3. If one backend fails, check whether the alternate backend is intended and supported before retrying a write.
+4. Preserve structured error codes and capability reasons verbatim instead of paraphrasing them into vague summaries.`;
 
 function installCommandFor(platformId: "macos" | "linux" | "windows"): string {
   const platform = platformCards.find((item) => item.id === platformId);
@@ -35,6 +141,97 @@ function installCommandFor(platformId: "macos" | "linux" | "windows"): string {
 }
 
 export const docsPages: Record<string, DocPage> = {
+  "agent-skills": {
+    title: "Agent skills",
+    eyebrow: "Skills",
+    summary:
+      "Use these standalone ankicli skills when you want the OpenClaw-style Anki skills in a public, harness-agnostic form that can be copied into Codex or another compatible skill home today.",
+    helper: "Paste this page into your LLM chat or copy a specific skill file directly.",
+    whenToUse: [
+      "You want the existing Anki skill ideas without depending on the OpenClaw plugin bundle.",
+      "You want a stable public repo path and copy-paste install flow for Codex or another compatible agent harness.",
+    ],
+    agentShouldKnow: [
+      "These skills are generic copies of the existing OpenClaw-oriented skill concepts, rewritten around ankicli commands instead of plugin-only tool names.",
+      "Humans can install one or more skills into a local skill home, then hand the docs or skill files to the agent for recurring Anki work.",
+    ],
+    sections: [
+      {
+        heading: "What this page ships",
+        body: [
+          "The canonical public copies live under the repo-top `skills/` folder. That makes them easy to link, curl, and copy without exposing hidden repo-local paths or waiting for the plugin release.",
+          "You can install them directly into a Codex home today, or just copy the `SKILL.md` body from this page and self-create the file manually.",
+        ],
+        commands: [
+          {
+            label: "Public skill files",
+            body: `skills/ankicli-collection-management/SKILL.md\nskills/ankicli-note-authoring/SKILL.md\nskills/ankicli-study/SKILL.md\nskills/ankicli-diagnostics/SKILL.md`,
+          },
+        ],
+        bullets: [
+          "The OpenClaw plugin copies can stay where they are for now.",
+          "These top-level copies are the public source of truth for standalone install and docs.",
+        ],
+      },
+      {
+        heading: "Install ankicli-collection-management",
+        body: [
+          "Use this when the agent needs to inspect deck state, verify collection readiness, and keep deck mutations narrow and reversible.",
+        ],
+        commands: [
+          { label: "Install into Codex home (macOS/Linux)", body: codexSkillInstallBlock("ankicli-collection-management") },
+          { label: "Install into Codex home (Windows PowerShell)", body: codexSkillInstallBlockWindows("ankicli-collection-management") },
+          { label: "SKILL.md", body: collectionSkillBody },
+        ],
+      },
+      {
+        heading: "Install ankicli-note-authoring",
+        body: [
+          "Use this when the agent needs to add, update, and retag notes through ankicli without skipping search, preview, or dry-run safety steps.",
+        ],
+        commands: [
+          { label: "Install into Codex home (macOS/Linux)", body: codexSkillInstallBlock("ankicli-note-authoring") },
+          { label: "Install into Codex home (Windows PowerShell)", body: codexSkillInstallBlockWindows("ankicli-note-authoring") },
+          { label: "SKILL.md", body: authoringSkillBody },
+        ],
+      },
+      {
+        heading: "Install ankicli-study",
+        body: [
+          "Use this when the agent should behave like a tutor over ankicli study mode instead of dropping into raw note or deck mutation flows.",
+        ],
+        commands: [
+          { label: "Install into Codex home (macOS/Linux)", body: codexSkillInstallBlock("ankicli-study") },
+          { label: "Install into Codex home (Windows PowerShell)", body: codexSkillInstallBlockWindows("ankicli-study") },
+          { label: "SKILL.md", body: studySkillBody },
+        ],
+      },
+      {
+        heading: "Install ankicli-diagnostics",
+        body: [
+          "Use this when the agent needs a debugging skill for runtime health, backend support gaps, profile targeting, and structured ankicli failures.",
+        ],
+        commands: [
+          { label: "Install into Codex home (macOS/Linux)", body: codexSkillInstallBlock("ankicli-diagnostics") },
+          { label: "Install into Codex home (Windows PowerShell)", body: codexSkillInstallBlockWindows("ankicli-diagnostics") },
+          { label: "SKILL.md", body: diagnosticsSkillBody },
+        ],
+      },
+      {
+        heading: "How to use them",
+        body: [
+          "A good operator pattern is: install ankicli, verify the local runtime, install one or more of these skills into the local skill home, then hand the matching docs page or `Copy Page` output to the agent.",
+          "The skills are intentionally narrow. Use the study skill for tutoring, the note-authoring skill for content changes, the collection-management skill for deck state, and the diagnostics skill when the environment is suspect.",
+        ],
+        commands: [
+          {
+            label: "Operator verification baseline",
+            body: 'ankicli --version\nankicli --json doctor env\nankicli --json doctor backend\nankicli --json profile list',
+          },
+        ],
+      },
+    ],
+  },
   "cli-guide": {
     title: "CLI guide",
     eyebrow: "Operations",

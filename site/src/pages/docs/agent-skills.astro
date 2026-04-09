@@ -1,0 +1,9 @@
+---
+import DocsPage from "../../components/DocsPage.astro";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { docsPages } from "../../lib/docs";
+---
+
+<BaseLayout title="ankicli agent skills">
+  <DocsPage page={docsPages["agent-skills"]} />
+</BaseLayout>

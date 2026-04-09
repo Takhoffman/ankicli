@@ -4,6 +4,8 @@
 
 Docs and product site: [takhoffman.github.io/ankicli](https://takhoffman.github.io/ankicli/)
 
+Standalone agent skills: [agent skills](https://takhoffman.github.io/ankicli/docs/agent-skills/)
+
 Goal-driven study: [learning plans](https://takhoffman.github.io/ankicli/docs/learning-plans/)
 
 `ankicli` is a local-first Anki CLI for humans who want to install and supervise a safe, scriptable
@@ -12,6 +14,8 @@ control surface for agent harnesses like Claude, Codex, OpenClaw, and custom aut
 Installed by humans. Operated by agents.
 
 Supported platforms: macOS, Windows, and Linux.
+
+License: AGPL-3.0-or-later.
 
 ## Why It Exists
 
@@ -88,6 +92,7 @@ ankicli --json --profile "User 1" note add-tags --id 123 --tag review --dry-run
 ## Docs
 
 - Product site: [takhoffman.github.io/ankicli](https://takhoffman.github.io/ankicli/)
+- Agent skills: [agent skills](https://takhoffman.github.io/ankicli/docs/agent-skills/)
 - Learning plans: [learning plans](https://takhoffman.github.io/ankicli/docs/learning-plans/)
 - Recipes: [recipes](https://takhoffman.github.io/ankicli/docs/recipes/)
 - CLI guide: [cli guide](https://takhoffman.github.io/ankicli/docs/cli-guide/)
@@ -100,6 +105,11 @@ ankicli --json --profile "User 1" note add-tags --id 123 --tag review --dry-run
 - Troubleshooting: [troubleshooting](https://takhoffman.github.io/ankicli/docs/troubleshooting/)
 
 Every major docs page is designed to be readable by humans and easy to copy into an LLM chat.
+
+## License
+
+`ankicli` is licensed under `AGPL-3.0-or-later`. It depends on the upstream Anki runtime, which is
+also AGPL-licensed. See [LICENSE](/Users/thoffman/ankicli/LICENSE).
 
 ## For Contributors And Advanced Backend Work
 
