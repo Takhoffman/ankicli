@@ -158,6 +158,7 @@ def test_powershell_installer_script_is_version_and_path_aware(tmp_path: Path) -
         text=True,
         env=os.environ
         | {
+            "ANKICLI_TARGET": "windows-x64",
             "ANKICLI_RELEASES_BASE": release_root.as_uri(),
             "ANKICLI_INSTALL_ROOT": str(install_root),
             "ANKICLI_SKIP_VERIFY": "1",

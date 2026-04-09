@@ -33,6 +33,10 @@ function Resolve-Version {
 }
 
 function Get-TargetId {
+    if ($env:ANKICLI_TARGET) {
+        return $env:ANKICLI_TARGET
+    }
+
     $Arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
     switch ($Arch) {
         "X64" { return "windows-x64" }
