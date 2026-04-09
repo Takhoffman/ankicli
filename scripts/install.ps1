@@ -62,6 +62,21 @@ function Verify-Checksum {
     }
 }
 
+function Download-File {
+    param(
+        [string]$Uri,
+        [string]$OutFile
+    )
+
+    $ParsedUri = [System.Uri]$Uri
+    if ($ParsedUri.Scheme -eq "file") {
+        Copy-Item -Path $ParsedUri.LocalPath -Destination $OutFile -Force
+        return
+    }
+
+    Invoke-WebRequest -Uri $Uri -OutFile $OutFile
+}
+
 $ResolvedVersion = Resolve-Version -Candidate $Version
 $TargetId = Get-TargetId
 $ArchiveName = "ankicli-$ResolvedVersion-$TargetId.zip"
@@ -74,8 +89,8 @@ $ExtractDir = Join-Path $TempRoot "extract"
 
 New-Item -ItemType Directory -Path $TempRoot | Out-Null
 
-Invoke-WebRequest -Uri "$ReleasesBase/download/$ReleaseTag/$ArchiveName" -OutFile $ArchivePath
-Invoke-WebRequest -Uri "$ReleasesBase/download/$ReleaseTag/$ChecksumsName" -OutFile $ChecksumsPath
+Download-File -Uri "$ReleasesBase/download/$ReleaseTag/$ArchiveName" -OutFile $ArchivePath
+Download-File -Uri "$ReleasesBase/download/$ReleaseTag/$ChecksumsName" -OutFile $ChecksumsPath
 
 Verify-Checksum -ArchivePath $ArchivePath -ChecksumsPath $ChecksumsPath
 Expand-Archive -Path $ArchivePath -DestinationPath $ExtractDir -Force
