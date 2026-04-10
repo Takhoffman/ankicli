@@ -499,7 +499,7 @@ def test_media_check_is_structured_unsupported_live_ankiconnect(runner) -> None:
 
 
 @pytest.mark.backend_ankiconnect_real
-def test_media_attach_is_structured_unsupported_live_ankiconnect(runner, tmp_path) -> None:
+def test_media_attach_dry_run_live_ankiconnect(runner, tmp_path) -> None:
     _require_live_ankiconnect(runner)
     source_path = tmp_path / "upload.txt"
     source_path.write_text("hello")
@@ -517,10 +517,40 @@ def test_media_attach_is_structured_unsupported_live_ankiconnect(runner, tmp_pat
         ],
     )
 
-    assert result.exit_code == 14
+    assert result.exit_code == 0
     response = json.loads(result.stdout)
-    assert response["error"]["code"] == "BACKEND_OPERATION_UNSUPPORTED"
-    assert response["error"]["details"] == {
-        "backend": "ankiconnect",
-        "operation": "media.attach",
-    }
+    assert response["ok"] is True
+    assert response["data"]["name"] == "upload.txt"
+    assert response["data"]["source_path"] == str(source_path)
+    assert response["data"]["size"] == len("hello")
+    assert response["data"]["action"] == "attach"
+    assert response["data"]["dry_run"] is True
+
+
+@pytest.mark.backend_ankiconnect_real
+def test_deck_delete_dry_run_live_ankiconnect(runner) -> None:
+    _require_live_ankiconnect(runner)
+    deck_name = _require_env(
+        "ANKICLI_REAL_DECK",
+        "set ANKICLI_REAL_DECK to run live AnkiConnect deck delete checks",
+    )
+
+    result = runner.invoke(
+        args=[
+            "--json",
+            "--backend",
+            "ankiconnect",
+            "deck",
+            "delete",
+            "--name",
+            deck_name,
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0
+    response = json.loads(result.stdout)
+    assert response["ok"] is True
+    assert response["data"]["name"] == deck_name
+    assert response["data"]["action"] == "delete"
+    assert response["data"]["dry_run"] is True

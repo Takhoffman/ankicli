@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import http.client
 import json
 import os
@@ -20,6 +21,7 @@ from ankicli.app.errors import (
     BackendUnavailableError,
     CardNotFoundError,
     DeckNotFoundError,
+    MediaNotFoundError,
     ModelNotFoundError,
     NoteNotFoundError,
     ValidationError,
@@ -267,8 +269,21 @@ class AnkiConnectBackend(BaseBackend):
         raise DeckNotFoundError(f'Deck "{name}" was not found', details={"deck_name": name})
 
     def create_deck(self, collection_path: Path, *, name: str, dry_run: bool) -> dict:
-        del collection_path, name, dry_run
-        self._raise_unsupported("deck.create")
+        del collection_path
+        if name in self._deck_name_to_id():
+            raise ValidationError(
+                f'Deck "{name}" already exists',
+                details={"deck_name": name},
+            )
+        created_id = None
+        if not dry_run:
+            created_id = self._invoke("createDeck", {"deck": name})
+        return {
+            "id": int(created_id) if created_id is not None else None,
+            "name": name,
+            "action": "create",
+            "dry_run": dry_run,
+        }
 
     def rename_deck(
         self,
@@ -282,8 +297,24 @@ class AnkiConnectBackend(BaseBackend):
         self._raise_unsupported("deck.rename")
 
     def delete_deck(self, collection_path: Path, *, name: str, dry_run: bool) -> dict:
-        del collection_path, name, dry_run
-        self._raise_unsupported("deck.delete")
+        del collection_path
+        deck_id = self._deck_name_to_id().get(name)
+        if deck_id is None:
+            raise DeckNotFoundError(f'Deck "{name}" was not found', details={"deck_name": name})
+        if not dry_run:
+            self._invoke(
+                "deleteDecks",
+                {
+                    "decks": [name],
+                    "cardsToo": False,
+                },
+            )
+        return {
+            "id": int(deck_id),
+            "name": name,
+            "action": "delete",
+            "dry_run": dry_run,
+        }
 
     def reparent_deck(
         self,
@@ -356,8 +387,37 @@ class AnkiConnectBackend(BaseBackend):
         name: str | None,
         dry_run: bool,
     ) -> dict:
-        del collection_path, source_path, name, dry_run
-        self._raise_unsupported("media.attach")
+        del collection_path
+        resolved_source_path = source_path.expanduser().resolve()
+        if not resolved_source_path.exists() or not resolved_source_path.is_file():
+            raise MediaNotFoundError(
+                f"Source media path does not exist: {resolved_source_path}",
+                details={"path": str(resolved_source_path)},
+            )
+        target_name = (name or resolved_source_path.name).strip()
+        if not target_name:
+            raise ValidationError("--name must not be empty")
+        if Path(target_name).name != target_name:
+            raise ValidationError(
+                f'Invalid media name "{target_name}"',
+                details={"name": target_name},
+            )
+        if not dry_run:
+            self._invoke(
+                "storeMediaFile",
+                {
+                    "filename": target_name,
+                    "data": base64.b64encode(resolved_source_path.read_bytes()).decode(),
+                },
+            )
+        return {
+            "name": target_name,
+            "source_path": str(resolved_source_path),
+            "path": None,
+            "size": resolved_source_path.stat().st_size,
+            "action": "attach",
+            "dry_run": dry_run,
+        }
 
     def resolve_media_path(self, collection_path: Path, *, name: str) -> dict:
         del collection_path, name

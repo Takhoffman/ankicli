@@ -65,6 +65,9 @@ def test_backend_capabilities_reports_available_when_version_responds(
     assert capabilities.supports_live_desktop is True
     assert capabilities.supported_operations["note.delete"] is False
     assert capabilities.supported_operations["note.add"] is True
+    assert capabilities.supported_operations["deck.create"] is True
+    assert capabilities.supported_operations["deck.delete"] is True
+    assert capabilities.supported_operations["media.attach"] is True
     assert capabilities.supported_operations["media.list"] is False
     assert capabilities.supported_operations["auth.status"] is False
     assert capabilities.supported_operations["sync.run"] is False
@@ -207,7 +210,9 @@ def test_get_model_templates_parses_ankiconnect_response(monkeypatch: pytest.Mon
 
 
 @pytest.mark.unit
-def test_media_methods_raise_structured_unsupported_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_media_list_still_raises_structured_unsupported_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _install_http_connection(monkeypatch, {"version": {"result": 5, "error": None}})
     backend = AnkiConnectBackend()
 
@@ -215,19 +220,6 @@ def test_media_methods_raise_structured_unsupported_error(monkeypatch: pytest.Mo
         backend.list_media(Path("."))
 
     assert excinfo.value.details == {"backend": "ankiconnect", "operation": "media.list"}
-
-    with pytest.raises(BackendOperationUnsupportedError) as attach_excinfo:
-        backend.attach_media(
-            Path("."),
-            source_path=Path("/tmp/file.txt"),
-            name=None,
-            dry_run=True,
-        )
-
-    assert attach_excinfo.value.details == {
-        "backend": "ankiconnect",
-        "operation": "media.attach",
-    }
 
 
 @pytest.mark.unit
@@ -273,6 +265,145 @@ def test_add_note_dry_run_uses_can_add_notes(monkeypatch: pytest.MonkeyPatch) ->
         "model": "Basic",
         "fields": {"Front": "hello"},
         "tags": ["tag1"],
+        "dry_run": True,
+    }
+
+
+@pytest.mark.unit
+def test_create_deck_uses_ankiconnect_create_deck(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_http_connection(
+        monkeypatch,
+        {
+            "deckNamesAndIds": {"result": {"Default": 1}, "error": None},
+            "createDeck": {"result": 99, "error": None},
+        },
+    )
+
+    result = AnkiConnectBackend().create_deck(Path("."), name="Japanese", dry_run=False)
+
+    assert result == {
+        "id": 99,
+        "name": "Japanese",
+        "action": "create",
+        "dry_run": False,
+    }
+
+
+@pytest.mark.unit
+def test_create_deck_dry_run_validates_name_without_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_http_connection(
+        monkeypatch,
+        {
+            "deckNamesAndIds": {"result": {"Default": 1}, "error": None},
+        },
+    )
+
+    result = AnkiConnectBackend().create_deck(Path("."), name="Japanese", dry_run=True)
+
+    assert result == {
+        "id": None,
+        "name": "Japanese",
+        "action": "create",
+        "dry_run": True,
+    }
+
+
+@pytest.mark.unit
+def test_delete_deck_uses_ankiconnect_delete_decks(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_http_connection(
+        monkeypatch,
+        {
+            "deckNamesAndIds": {"result": {"Default": 1, "Japanese": 99}, "error": None},
+            "deleteDecks": {"result": None, "error": None},
+        },
+    )
+
+    result = AnkiConnectBackend().delete_deck(Path("."), name="Japanese", dry_run=False)
+
+    assert result == {
+        "id": 99,
+        "name": "Japanese",
+        "action": "delete",
+        "dry_run": False,
+    }
+
+
+@pytest.mark.unit
+def test_delete_deck_dry_run_validates_name_without_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_http_connection(
+        monkeypatch,
+        {
+            "deckNamesAndIds": {"result": {"Default": 1, "Japanese": 99}, "error": None},
+        },
+    )
+
+    result = AnkiConnectBackend().delete_deck(Path("."), name="Japanese", dry_run=True)
+
+    assert result == {
+        "id": 99,
+        "name": "Japanese",
+        "action": "delete",
+        "dry_run": True,
+    }
+
+
+@pytest.mark.unit
+def test_attach_media_uses_store_media_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "hello.mp3"
+    source.write_bytes(b"audio-bytes")
+    _install_http_connection(
+        monkeypatch,
+        {
+            "storeMediaFile": {"result": "hello.mp3", "error": None},
+        },
+    )
+
+    result = AnkiConnectBackend().attach_media(
+        Path("."),
+        source_path=source,
+        name=None,
+        dry_run=False,
+    )
+
+    assert result == {
+        "name": "hello.mp3",
+        "source_path": str(source.resolve()),
+        "path": None,
+        "size": len(b"audio-bytes"),
+        "action": "attach",
+        "dry_run": False,
+    }
+
+
+@pytest.mark.unit
+def test_attach_media_dry_run_skips_store_media_write(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "hello.mp3"
+    source.write_bytes(b"audio-bytes")
+    _install_http_connection(monkeypatch, {})
+
+    result = AnkiConnectBackend().attach_media(
+        Path("."),
+        source_path=source,
+        name="renamed.mp3",
+        dry_run=True,
+    )
+
+    assert result == {
+        "name": "renamed.mp3",
+        "source_path": str(source.resolve()),
+        "path": None,
+        "size": len(b"audio-bytes"),
+        "action": "attach",
         "dry_run": True,
     }
 

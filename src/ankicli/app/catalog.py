@@ -1041,6 +1041,8 @@ ANKICONNECT_OPERATION_IDS: set[str] = {
     "deck.list",
     "deck.get",
     "deck.stats",
+    "deck.create",
+    "deck.delete",
     "model.list",
     "model.get",
     "model.fields",
@@ -1065,6 +1067,7 @@ ANKICONNECT_OPERATION_IDS: set[str] = {
     "card.get",
     "card.suspend",
     "card.unsuspend",
+    "media.attach",
 }
 
 OPERATION_IDS = tuple(spec.id for spec in OPERATION_SPECS)

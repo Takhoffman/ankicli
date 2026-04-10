@@ -400,6 +400,9 @@ def test_ankiconnect_backend_capabilities_expose_operation_matrix(runner) -> Non
     payload = json.loads(result.stdout)
     operations = payload["data"]["supported_operations"]
     assert operations["note.add"] is True
+    assert operations["deck.create"] is True
+    assert operations["deck.delete"] is True
+    assert operations["media.attach"] is True
     assert operations["note.delete"] is False
     assert operations["tag.rename"] is False
     assert operations["collection.validate"] is False
@@ -1012,9 +1015,9 @@ def test_deck_reparent_requires_confirmation_or_dry_run(runner, tmp_path) -> Non
 
 
 @pytest.mark.unit
-@proves("deck.create", "cli_contract", "failure")
+@proves("deck.create", "cli_contract")
 @proves("deck.rename", "cli_contract", "failure")
-def test_ankiconnect_deck_lifecycle_is_structured_unsupported_error(runner) -> None:
+def test_ankiconnect_deck_create_is_supported_but_rename_is_not(runner) -> None:
     create_result = runner.invoke(
         args=[
             "--json",
@@ -1042,15 +1045,48 @@ def test_ankiconnect_deck_lifecycle_is_structured_unsupported_error(runner) -> N
         ],
     )
 
-    assert create_result.exit_code == 14
+    assert create_result.exit_code == 0
     assert rename_result.exit_code == 14
-    assert json.loads(create_result.stdout)["error"]["details"] == {
-        "backend": "ankiconnect",
-        "operation": "deck.create",
+    assert json.loads(create_result.stdout)["data"] == {
+        "id": None,
+        "name": "French",
+        "action": "create",
+        "dry_run": True,
+        "auto_backup_created": False,
+        "auto_backup_name": None,
+        "auto_backup_path": None,
     }
     assert json.loads(rename_result.stdout)["error"]["details"] == {
         "backend": "ankiconnect",
         "operation": "deck.rename",
+    }
+
+
+@pytest.mark.unit
+@proves("deck.delete", "cli_contract")
+def test_ankiconnect_deck_delete_is_supported(runner) -> None:
+    result = runner.invoke(
+        args=[
+            "--json",
+            "--backend",
+            "ankiconnect",
+            "deck",
+            "delete",
+            "--name",
+            "Default",
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["data"] == {
+        "id": 1,
+        "name": "Default",
+        "action": "delete",
+        "dry_run": True,
+        "auto_backup_created": False,
+        "auto_backup_name": None,
+        "auto_backup_path": None,
     }
 
 
