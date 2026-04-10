@@ -74,6 +74,35 @@ def test_backend_capabilities_reports_available_when_version_responds(
 
 
 @pytest.mark.unit
+def test_backend_defaults_to_ankiconnect_api_version_6() -> None:
+    backend = AnkiConnectBackend()
+
+    assert backend.version == 6
+
+
+@pytest.mark.unit
+def test_backend_uses_env_override_for_ankiconnect_api_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANKICONNECT_API_VERSION", "5")
+
+    backend = AnkiConnectBackend()
+
+    assert backend.version == 5
+
+
+@pytest.mark.unit
+def test_backend_ignores_invalid_env_override_for_ankiconnect_api_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANKICONNECT_API_VERSION", "not-a-number")
+
+    backend = AnkiConnectBackend()
+
+    assert backend.version == 6
+
+
+@pytest.mark.unit
 @proves("backend.capabilities", "failure")
 @proves("backend.info", "failure")
 def test_backend_capabilities_reports_unavailable_on_connection_failure(

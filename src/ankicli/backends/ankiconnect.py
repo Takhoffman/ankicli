@@ -32,10 +32,18 @@ from ankicli.backends.base import BaseBackend
 
 class AnkiConnectBackend(BaseBackend):
     name = "ankiconnect"
+    default_api_version = 6
 
-    def __init__(self, *, url: str | None = None, version: int = 5) -> None:
+    def __init__(self, *, url: str | None = None, version: int | None = None) -> None:
         self.url = url or os.environ.get("ANKICONNECT_URL", "http://127.0.0.1:8765")
-        self.version = version
+        configured_version = version
+        if configured_version is None:
+            raw_version = os.environ.get("ANKICONNECT_API_VERSION", str(self.default_api_version))
+            try:
+                configured_version = int(raw_version)
+            except ValueError:
+                configured_version = self.default_api_version
+        self.version = configured_version
 
     def supported_operations(self) -> dict[str, bool]:
         return supported_operations_for_backend(self.name, available=True)
