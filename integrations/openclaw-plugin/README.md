@@ -2,6 +2,16 @@
 
 This package is a thin OpenClaw adapter over `ankicli --json`.
 
+Status: experimental/internal. The primary public path today is the standalone
+skill installer:
+
+```bash
+ankicli skill install --target openclaw
+```
+
+Use the plugin only when you are intentionally working on the richer OpenClaw
+adapter, not for normal public onboarding yet.
+
 It lives in the `ankicli` repo so the Python CLI and the plugin-facing contract
 stay owned together. The plugin does not reimplement Anki behavior; it shells
 out to `ankicli` and preserves the normalized JSON contract.
@@ -57,13 +67,29 @@ primary workflows, backend notes, active study-session details, and any
 OpenClaw-rich preview hints without
 hardcoding that state in the plugin.
 
-## Local Install Into OpenClaw
+## Experimental Local Plugin Install Into OpenClaw
 
 From an OpenClaw checkout or install:
 
 ```bash
-openclaw plugins install -l /Users/thoffman/ankicli/integrations/openclaw-plugin
+openclaw plugins install -l ~/ankicli/integrations/openclaw-plugin
 ```
+
+If you are testing against an OpenClaw source checkout and a `dev` profile, the
+practical setup we needed was:
+
+1. Set `tools.profile` to `full` in `~/.openclaw-dev/openclaw.json`.
+2. Enable the `/plugins` chat command if you want in-UI debugging:
+   `"commands": { "plugins": true }`
+3. Point the plugin at a real collection path:
+   `"plugins.entries.ankicli.config.collectionPath": "/Users/<user>/Library/Application Support/Anki2/User 1/collection.anki2"`
+4. Stop the launchd-managed gateway before starting the branch manually:
+   `openclaw --profile dev gateway stop`
+5. Refresh the UI and start a new chat after plugin/profile changes so the
+   session does not keep a stale tool list.
+
+The fuller troubleshooting guide lives in
+[openclaw-plugin.md](../../docs/openclaw-plugin.md).
 
 For local config, set plugin config values such as:
 
@@ -83,8 +109,8 @@ For local config, set plugin config values such as:
 - `all`
 - compatibility aliases: `passthrough-only`, `curated-only`
 
-See [openclaw-plugin.md](/Users/thoffman/ankicli/docs/openclaw-plugin.md) for
+See [openclaw-plugin.md](../../docs/openclaw-plugin.md) for
 the stable command and JSON contract this adapter expects, and
-[anki-study-ux-roadmap.md](/Users/thoffman/ankicli/docs/anki-study-ux-roadmap.md)
+[anki-study-ux-roadmap.md](../../docs/anki-study-ux-roadmap.md)
 for the longer-term end-state plan. Generated reference output lives at
-[anki-catalog-reference.md](/Users/thoffman/ankicli/docs/anki-catalog-reference.md).
+[anki-catalog-reference.md](../../docs/anki-catalog-reference.md).

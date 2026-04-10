@@ -80,6 +80,20 @@ def test_built_wheel_installs_and_exposes_cli() -> None:
         help_result = _run([str(cli_bin), "--help"])
         assert help_result.returncode == 0, help_result.stderr
         assert "collection" in help_result.stdout
+        assert "skill" in help_result.stdout
+
+        skill_list_result = _run([str(cli_bin), "--json", "skill", "list"])
+        assert skill_list_result.returncode == 0, skill_list_result.stderr
+        skill_list_payload = json.loads(skill_list_result.stdout)
+        assert skill_list_payload["data"]["items"][0]["name"] == "ankicli"
+
+        skill_root = temp_path / "agent-skills"
+        skill_install_result = _run(
+            [str(cli_bin), "--json", "skill", "install", "--path", str(skill_root)]
+        )
+        assert skill_install_result.returncode == 0, skill_install_result.stderr
+        assert (skill_root / "ankicli" / "SKILL.md").exists()
+        assert (skill_root / "ankicli" / "references" / "setup.md").exists()
 
         version_result = _run([str(cli_bin), "--version"])
         assert version_result.returncode == 0, version_result.stderr

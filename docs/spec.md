@@ -108,6 +108,7 @@ service layer, JSON-first responses, and a backend seam present from day one.
 
 - Collection and backend:
   - `--version`
+  - `changelog [--all]`
   - `--collection /path/to/collection.anki2`
   - `--profile <name>`
   - `doctor env|backend|capabilities|collection|safety`

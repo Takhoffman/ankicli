@@ -4,7 +4,7 @@
 
 Docs and product site: [takhoffman.github.io/ankicli](https://takhoffman.github.io/ankicli/)
 
-Standalone agent skills: [agent skills](https://takhoffman.github.io/ankicli/docs/agent-skills/)
+Standalone agent skill: [agent skills](https://takhoffman.github.io/ankicli/docs/agent-skills/)
 
 Goal-driven study: [learning plans](https://takhoffman.github.io/ankicli/docs/learning-plans/)
 
@@ -51,24 +51,48 @@ The PyPI distribution is `anki-agent-toolkit`; the installed command is still `a
 
 ## Verify
 
-Run these before handing `ankicli` to an agent:
+Run the human setup wizard first, then use JSON checks before handing `ankicli` to an agent:
 
 ```bash
 ankicli --version
+ankicli configure
 ankicli --json doctor env
 ankicli --json doctor backend
 ankicli --json profile list
+ankicli skill install --target codex
 ```
+
+If you skip collection, sync, or agent skill setup, run `ankicli configure` later to reopen the same wizard.
 
 ## First Steps
 
-Inspect the local environment and confirm the target profile before real work:
+Save your default Anki profile once, then normal commands can omit repeated `--profile` flags:
 
 ```bash
 ankicli --json profile default
-ankicli --json --profile "User 1" collection info
-ankicli --json --profile "User 1" search preview --kind notes --query 'deck:Default' --limit 5
-ankicli --json --profile "User 1" note add-tags --id 123 --tag review --dry-run
+ankicli workspace set --profile "User 1"
+ankicli --json workspace show
+ankicli --json collection info
+ankicli --json search preview --kind notes --query 'deck:Default' --limit 5
+ankicli --json note add-tags --id 123 --tag review --dry-run
+```
+
+Human-facing workspace config lives under `~/.ankicli/workspaces/<name>/config.json`. The active
+workspace is `default`, and you can add more named workspaces for different workflows:
+
+```bash
+ankicli workspace set --name travel --profile "Travel" --activate
+ankicli --workspace travel --json collection info
+ankicli workspace use --name default
+```
+
+Sync credentials are stored separately in the system keyring when available, with a platform-specific
+file fallback if no usable keyring exists.
+
+For a fully explicit setup, use a collection path instead of a profile:
+
+```bash
+ankicli workspace set --collection /path/to/collection.anki2
 ```
 
 ## What You Can Do
@@ -84,6 +108,7 @@ ankicli --json --profile "User 1" note add-tags --id 123 --tag review --dry-run
 
 - Prefer `--json` for scripts and agents.
 - Use `--dry-run` first on write-capable commands.
+- Prefer saved workspace config for day-to-day use: `ankicli workspace set --profile "User 1"`.
 - Prefer `--profile` for normal local usage and `--collection` for explicit low-level targeting.
 - Use `sync status` as the safe preflight before running a real sync.
 - Sync is not backup. Use `backup create` or the built-in auto-backup flow when rollback matters.
@@ -105,20 +130,21 @@ ankicli --json --profile "User 1" note add-tags --id 123 --tag review --dry-run
 - Sync and backups: [sync and backups](https://takhoffman.github.io/ankicli/docs/sync-and-backups/)
 - Study mode: [study](https://takhoffman.github.io/ankicli/docs/study/)
 - Troubleshooting: [troubleshooting](https://takhoffman.github.io/ankicli/docs/troubleshooting/)
+- OpenClaw plugin adapter (internal/dev): [openclaw plugin](docs/openclaw-plugin.md)
 
 Every major docs page is designed to be readable by humans and easy to copy into an LLM chat.
 
 ## License
 
 `ankicli` is licensed under `AGPL-3.0-or-later`. It depends on the upstream Anki runtime, which is
-also AGPL-licensed. See [LICENSE](/Users/thoffman/ankicli/LICENSE).
+also AGPL-licensed. See [LICENSE](LICENSE).
 
 ## For Contributors And Advanced Backend Work
 
 The top-level README is intentionally product-oriented. Contributor and backend-contract detail still
 exists, but it lives in deeper docs and repo files:
 
-- CLI and backend contract: [`docs/spec.md`](/Users/thoffman/ankicli/docs/spec.md)
+- CLI and backend contract: [`docs/spec.md`](docs/spec.md)
 - Release/install workflows: [product site](https://takhoffman.github.io/ankicli/)
 - Source and workflows: [repository](https://github.com/Takhoffman/ankicli)
 

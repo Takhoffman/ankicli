@@ -8,6 +8,7 @@ import platform
 import sys
 from pathlib import Path
 
+from ankicli.app.config import workspace_report
 from ankicli.app.credentials import (
     CredentialStore,
     default_credential_store,
@@ -97,6 +98,7 @@ class DoctorService:
         return {
             "python_version": platform.python_version(),
             "platform": platform.platform(),
+            **workspace_report(),
             "default_anki2_root": str(default_anki2_root().expanduser().resolve()),
             "anki_source_path": probe.source_path,
             "anki_source_import_path": probe.source_import_path,

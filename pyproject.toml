@@ -33,6 +33,10 @@ ankicli = "ankicli.main:run"
 [tool.hatch.build.targets.wheel]
 packages = ["src/ankicli"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"CHANGELOG.md" = "ankicli/CHANGELOG.md"
+"skills" = "ankicli/skills"
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]

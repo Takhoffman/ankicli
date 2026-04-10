@@ -20,6 +20,9 @@ class Settings:
     backend_name: str
     json_output: bool
     no_auto_backup: bool
+    workspace_config_path: str | None
+    workspace_target_source: str | None
+    workspace: str | None
 
 
 @dataclass(slots=True)

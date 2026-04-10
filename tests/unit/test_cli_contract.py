@@ -28,6 +28,7 @@ def test_doctor_env_json_contract(runner) -> None:
     assert "credential_storage_backend" in payload["data"]
     assert "credential_storage_available" in payload["data"]
     assert "credential_storage_fallback" in payload["data"]
+    assert "config_path" in payload["data"]
 
 
 @pytest.mark.unit
@@ -36,6 +37,311 @@ def test_version_reports_package_version(runner) -> None:
 
     assert result.exit_code == 0
     assert result.stdout.strip() == __version__
+
+
+@pytest.mark.unit
+def test_changelog_reports_latest_section_for_humans(runner) -> None:
+    result = runner.invoke(args=["changelog"])
+
+    assert result.exit_code == 0
+    assert result.stdout.startswith("## Unreleased")
+    assert "# Changelog" not in result.stdout
+    assert "ankicli changelog --all" in result.stdout
+
+
+@pytest.mark.unit
+def test_changelog_json_contract(runner) -> None:
+    result = runner.invoke(args=["--json", "changelog"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["data"]["title"] == "Unreleased"
+    assert payload["data"]["full"] is False
+    assert payload["data"]["content"].startswith("## Unreleased")
+    assert payload["data"]["source"]
+
+
+@pytest.mark.unit
+def test_changelog_all_includes_full_markdown(runner) -> None:
+    result = runner.invoke(args=["--json", "changelog", "--all"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["data"]["title"] == "Changelog"
+    assert payload["data"]["full"] is True
+    assert payload["data"]["content"].startswith("# Changelog")
+
+
+@pytest.mark.unit
+def test_workspace_set_and_show_contract(runner, tmp_path) -> None:
+    env = {"ANKICLI_CONFIG_HOME": str(tmp_path)}
+
+    set_result = runner.invoke(
+        args=["--json", "workspace", "set", "--profile", "User 1"],
+        env=env,
+    )
+    show_result = runner.invoke(args=["--json", "workspace", "show"], env=env)
+
+    assert set_result.exit_code == 0
+    assert show_result.exit_code == 0
+    payload = json.loads(show_result.stdout)
+    assert payload["data"]["config_path"] == str(
+        tmp_path / "workspaces/default/config.json"
+    )
+    assert payload["data"]["active_workspace"] == "default"
+    assert payload["data"]["selected_workspace"] == "default"
+    assert payload["data"]["workspace_config"] == {
+        "anki_profile": "User 1",
+        "collection": None,
+        "backend": None,
+    }
+    assert payload["data"]["active_target_source"] is None
+
+
+@pytest.mark.unit
+def test_workspace_supports_multiple_roots(runner, tmp_path) -> None:
+    env = {"ANKICLI_CONFIG_HOME": str(tmp_path)}
+    collection_path = tmp_path / "travel.anki2"
+
+    set_result = runner.invoke(
+        args=[
+            "--json",
+            "workspace",
+            "set",
+            "--name",
+            "travel",
+            "--collection",
+            str(collection_path),
+            "--activate",
+        ],
+        env=env,
+    )
+    list_result = runner.invoke(args=["--json", "workspace", "list"], env=env)
+
+    assert set_result.exit_code == 0
+    assert list_result.exit_code == 0
+    payload = json.loads(list_result.stdout)
+    assert payload["data"]["active_workspace"] == "travel"
+    assert payload["data"]["items"] == [
+        {
+            "name": "travel",
+            "active": True,
+            "root": str(tmp_path / "workspaces/travel"),
+            "config_path": str(tmp_path / "workspaces/travel/config.json"),
+            "config_exists": True,
+            "anki_profile": None,
+            "collection": str(collection_path),
+            "backend": None,
+        }
+    ]
+
+
+@pytest.mark.unit
+def test_saved_collection_is_used_as_default_target(runner, tmp_path) -> None:
+    env = {"ANKICLI_CONFIG_HOME": str(tmp_path)}
+    collection_path = tmp_path / "missing.anki2"
+
+    runner.invoke(
+        args=["--json", "workspace", "set", "--collection", str(collection_path)],
+        env=env,
+    )
+    result = runner.invoke(args=["--json", "collection", "info"], env=env)
+
+    assert result.exit_code == 5
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "COLLECTION_NOT_FOUND"
+    assert payload["error"]["details"]["path"] == str(collection_path)
+
+
+@pytest.mark.unit
+def test_workspace_global_option_selects_named_target(runner, tmp_path) -> None:
+    env = {"ANKICLI_CONFIG_HOME": str(tmp_path)}
+    collection_path = tmp_path / "travel.anki2"
+
+    runner.invoke(
+        args=[
+            "--json",
+            "workspace",
+            "set",
+            "--name",
+            "travel",
+            "--collection",
+            str(collection_path),
+        ],
+        env=env,
+    )
+    result = runner.invoke(
+        args=["--json", "--workspace", "travel", "collection", "info"],
+        env=env,
+    )
+
+    assert result.exit_code == 5
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "COLLECTION_NOT_FOUND"
+    assert payload["error"]["details"]["path"] == str(collection_path)
+
+
+@pytest.mark.unit
+def test_configure_reports_config_and_steps(runner, tmp_path) -> None:
+    result = runner.invoke(
+        args=["--json", "configure"],
+        env={"ANKICLI_CONFIG_HOME": str(tmp_path)},
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["data"]["workspace"]["config_path"] == str(
+        tmp_path / "workspaces/default/config.json"
+    )
+    assert payload["data"]["credential_storage"]["backend"]
+    assert any("collection info" in step for step in payload["data"]["steps"])
+
+
+@pytest.mark.unit
+def test_configure_json_output_is_structured(runner, tmp_path) -> None:
+    result = runner.invoke(
+        args=["--json", "configure"],
+        env={"ANKICLI_CONFIG_HOME": str(tmp_path)},
+    )
+
+    assert result.exit_code == 0
+    assert "A N K I C L I" not in result.stdout
+    assert "┌" not in result.stdout
+    json.loads(result.stdout)
+
+
+@pytest.mark.unit
+def test_configure_human_output_is_walkthrough(runner, tmp_path) -> None:
+    result = runner.invoke(
+        args=["configure", "--skip-sync", "--skip-skills"],
+        env={
+            "ANKICLI_CONFIG_HOME": str(tmp_path),
+            "ANKICLI_ANKI2_ROOT": str(tmp_path / "missing-anki-root"),
+        },
+        input="\n",
+    )
+
+    assert result.exit_code == 0
+    assert "ankicli configure" in result.stdout
+    assert "Recommended: skip collection setup for now." in result.stdout
+    assert "Skipped. You can do this later by running: ankicli configure" in result.stdout
+    assert "Collection target" in result.stdout
+    assert "Try next" in result.stdout
+    assert "Configure later" in result.stdout
+    assert not result.stdout.lstrip().startswith("{")
+
+
+@pytest.mark.unit
+def test_skill_list_json_contract(runner) -> None:
+    result = runner.invoke(args=["--json", "skill", "list"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert [item["name"] for item in payload["data"]["items"]] == ["ankicli"]
+    assert payload["data"]["targets"]["codex"].endswith(".codex/skills")
+    assert payload["data"]["targets"]["claude"].endswith(".claude/skills")
+    assert payload["data"]["targets"]["openclaw"].endswith(".openclaw/skills")
+
+
+@pytest.mark.unit
+def test_skill_install_copies_bundled_bundle_to_custom_path(runner, tmp_path) -> None:
+    skill_root = tmp_path / "agent-skills"
+
+    result = runner.invoke(
+        args=[
+            "--json",
+            "skill",
+            "install",
+            "--path",
+            str(skill_root),
+        ],
+    )
+    second_result = runner.invoke(
+        args=[
+            "--json",
+            "skill",
+            "install",
+            "--path",
+            str(skill_root),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (skill_root / "ankicli" / "SKILL.md").exists()
+    assert (skill_root / "ankicli" / "references" / "study.md").exists()
+    payload = json.loads(result.stdout)
+    assert payload["data"]["targets"][0]["target"] == "custom"
+    assert payload["data"]["targets"][0]["bundle"]["status"] == "installed"
+    second_payload = json.loads(second_result.stdout)
+    assert second_payload["data"]["targets"][0]["bundle"]["status"] == "skipped"
+    assert second_payload["data"]["targets"][0]["bundle"]["reason"] == "already_exists"
+
+
+@pytest.mark.unit
+def test_skill_install_help_does_not_expose_removed_skill_selector(runner) -> None:
+    result = runner.invoke(args=["skill", "install", "--help"])
+
+    assert result.exit_code == 0
+    assert "--skill" not in result.stdout
+
+
+@pytest.mark.unit
+def test_configure_can_install_skills_to_custom_path(runner, tmp_path) -> None:
+    skill_root = tmp_path / "agent-skills"
+    result = runner.invoke(
+        args=[
+            "configure",
+            "--skip-sync",
+            "--install-skills",
+            "--skill-path",
+            str(skill_root),
+        ],
+        env={
+            "ANKICLI_CONFIG_HOME": str(tmp_path / "config"),
+            "ANKICLI_ANKI2_ROOT": str(tmp_path / "missing-anki-root"),
+        },
+        input="\n",
+    )
+
+    assert result.exit_code == 0
+    assert "ankicli skill" in result.stdout
+    assert "installed: custom" in result.stdout
+    assert (skill_root / "ankicli" / "SKILL.md").exists()
+    assert (skill_root / "ankicli" / "references" / "diagnostics.md").exists()
+
+
+@pytest.mark.unit
+def test_configure_default_skill_prompt_installs_detected_agent_homes(runner, tmp_path) -> None:
+    home = tmp_path / "home"
+    (home / ".codex").mkdir(parents=True)
+    (home / ".claude").mkdir(parents=True)
+    (home / ".openclaw").mkdir(parents=True)
+
+    result = runner.invoke(
+        args=["configure", "--skip-sync"],
+        env={
+            "HOME": str(home),
+            "ANKICLI_CONFIG_HOME": str(tmp_path / "config"),
+            "ANKICLI_ANKI2_ROOT": str(tmp_path / "missing-anki-root"),
+        },
+        input="\n\n",
+    )
+
+    assert result.exit_code == 0
+    assert (
+        "Recommended: press Enter to install the ankicli skill into codex, claude, openclaw."
+        in result.stdout
+    )
+    assert "  Enter  install the ankicli skill into codex, claude, openclaw" in result.stdout
+    assert "installed: codex" in result.stdout
+    assert "installed: claude" in result.stdout
+    assert "installed: openclaw" in result.stdout
+    assert (home / ".codex/skills/ankicli/SKILL.md").exists()
+    assert (home / ".claude/skills/ankicli/SKILL.md").exists()
+    assert (home / ".openclaw/skills/ankicli/SKILL.md").exists()
+    assert (home / ".codex/skills/ankicli/references/study.md").exists()
 
 
 @pytest.mark.unit

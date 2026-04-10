@@ -8,6 +8,19 @@ import typer
 
 from ankicli import __version__
 from ankicli.app.catalog import catalog_snapshot
+from ankicli.app.changelog import changelog_report
+from ankicli.app.config import (
+    active_workspace,
+    list_workspaces,
+    load_workspace_config,
+    normalize_workspace_name,
+    save_workspace_config,
+    set_active_workspace,
+    workspace_config_path,
+    workspace_item,
+    workspace_report,
+)
+from ankicli.app.credentials import probe_default_credential_store
 from ankicli.app.errors import AnkiCliError, ValidationError
 from ankicli.app.output import (
     error_envelope,
@@ -35,6 +48,13 @@ from ankicli.app.services import (
     SyncService,
     TagService,
 )
+from ankicli.app.skills import (
+    detected_skill_targets,
+    skill_list_payload,
+)
+from ankicli.app.skills import (
+    install_skills as install_agent_skills,
+)
 from ankicli.app.study import StudyService
 from ankicli.runtime import Settings, get_backend
 
@@ -46,6 +66,8 @@ app = typer.Typer(
 doctor_app = typer.Typer(no_args_is_help=True, help="Inspect environment and backend state.")
 backend_app = typer.Typer(no_args_is_help=True, help="Inspect available backends and capabilities.")
 auth_app = typer.Typer(no_args_is_help=True, help="Manage sync credentials for the active backend.")
+workspace_app = typer.Typer(no_args_is_help=True, help="Manage saved ankicli workspaces.")
+skill_app = typer.Typer(no_args_is_help=True, help="Install bundled ankicli agent skills.")
 profile_app = typer.Typer(no_args_is_help=True, help="Inspect and resolve local Anki profiles.")
 backup_app = typer.Typer(no_args_is_help=True, help="Create, inspect, and restore local backups.")
 collection_app = typer.Typer(no_args_is_help=True, help="Inspect collection-level metadata.")
@@ -77,6 +99,8 @@ catalog_app = typer.Typer(
 app.add_typer(doctor_app, name="doctor")
 app.add_typer(backend_app, name="backend")
 app.add_typer(auth_app, name="auth")
+app.add_typer(workspace_app, name="workspace")
+app.add_typer(skill_app, name="skill")
 app.add_typer(profile_app, name="profile")
 app.add_typer(backup_app, name="backup")
 app.add_typer(collection_app, name="collection")
@@ -133,40 +157,502 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def _resolve_config_target(
+    *,
+    collection: str | None,
+    profile: str | None,
+    backend: str,
+    json_output: bool,
+    use_config: bool,
+    workspace: str | None,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    if collection or profile or not use_config or backend == "ankiconnect":
+        return collection, profile, None, None
+    workspace_name = normalize_workspace_name(workspace or active_workspace())
+    config_path = workspace_config_path(workspace_name).expanduser()
+    try:
+        workspace_config = load_workspace_config(workspace_name)
+    except AnkiCliError as error:
+        _emit_startup_error(
+            backend_name=backend,
+            json_output=json_output,
+            error=error,
+        )
+    source_prefix = f"workspace.{workspace_name}"
+    if workspace_config.collection:
+        return workspace_config.collection, None, str(config_path), f"{source_prefix}.collection"
+    if workspace_config.anki_profile:
+        return (
+            None,
+            workspace_config.anki_profile,
+            str(config_path),
+            f"{source_prefix}.anki_profile",
+        )
+    return None, None, str(config_path) if config_path.exists() else None, None
+
+
+def _error_dict(error: AnkiCliError) -> dict:
+    return {"code": error.code, "message": error.message, "details": error.details}
+
+
+def _discover_profile_items() -> tuple[list[dict], dict | None]:
+    try:
+        profiles = ProfileResolver().list_profiles()
+    except AnkiCliError as error:
+        return [], _error_dict(error)
+    return [profile.to_dict() for profile in profiles], None
+
+
+def _workspace_target_from_config(config) -> tuple[str | None, str | None]:
+    if config.anki_profile:
+        return "anki_profile", config.anki_profile
+    if config.collection:
+        return "collection", config.collection
+    return None, None
+
+
+def _configure_payload(
+    settings: Settings,
+    *,
+    workspace_name: str,
+    profiles: list[dict],
+    discovery_error: dict | None,
+    saved: bool,
+    save_error: dict | None,
+    sync_choice: str,
+    detected_default_profile: dict | None = None,
+    login_result: dict | None = None,
+    login_error: dict | None = None,
+    skill_result: dict | None = None,
+    skill_error: dict | None = None,
+) -> dict:
+    credential_store = probe_default_credential_store()
+    config = load_workspace_config(workspace_name)
+    target_type, target_value = _workspace_target_from_config(config)
+    if target_type:
+        steps = [
+            "ankicli collection info",
+            "ankicli deck list",
+            "ankicli search preview --kind notes --query 'deck:Default' --limit 5",
+            "ankicli auth status",
+            "ankicli sync status",
+        ]
+    else:
+        steps = [
+            "ankicli profile list",
+            'ankicli workspace set --profile "User 1"',
+            "ankicli collection info",
+        ]
+    return {
+        "goal": (
+            "find a local Anki collection, save an ankicli workspace, optionally configure "
+            "AnkiWeb sync credentials, then start using ankicli"
+        ),
+        "workspace": workspace_report(workspace_name, config),
+        "profiles": profiles,
+        "profile_discovery_error": discovery_error,
+        "target": {"type": target_type, "value": target_value},
+        "resolved_collection": settings.collection,
+        "resolved_anki_profile": settings.profile,
+        "resolved_backend": settings.backend_name,
+        "selected_workspace": workspace_name,
+        "active_target_source": settings.workspace_target_source,
+        "credential_storage": {
+            "backend": credential_store.backend,
+            "available": credential_store.available,
+            "fallback": credential_store.fallback,
+            "path": credential_store.path,
+            "reason": credential_store.reason,
+        },
+        "sync": {
+            "choice": sync_choice,
+            "login_result": login_result,
+            "login_error": login_error,
+        },
+        "skills": {
+            "install_result": skill_result,
+            "install_error": skill_error,
+        },
+        "detected_default_profile": detected_default_profile,
+        "saved": saved,
+        "save_error": save_error,
+        "steps": steps,
+        "notes": [
+            "~/.ankicli/workspaces/<name>/config.json stores human-facing workspace config.",
+            (
+                "Sync credentials are stored separately in the OS keyring when available, "
+                "with a platform file fallback."
+            ),
+            "Sync login uses an AnkiWeb account. You can skip sync and still use local commands.",
+        ],
+    }
+
+
+def _render_configure(data: dict) -> str:
+    lines = [
+        "Workspace",
+        f"  active: {data['workspace']['active_workspace']}",
+        f"  selected: {data['workspace']['selected_workspace']}",
+        f"  root: {data['workspace']['workspace_root']}",
+        f"  config: {data['workspace']['config_path']}",
+        "",
+        "Collection target",
+    ]
+    target = data["target"]
+    if target["type"] == "anki_profile":
+        lines.append(f"  Anki profile: {target['value']}")
+    elif target["type"] == "collection":
+        lines.append(f"  collection: {target['value']}")
+    else:
+        lines.append("  not set yet")
+    if data["profile_discovery_error"]:
+        lines.extend(
+            [
+                "",
+                "Profile discovery",
+                f"  {data['profile_discovery_error']['code']}: "
+                f"{data['profile_discovery_error']['message']}",
+            ]
+        )
+    elif data["profiles"]:
+        lines.extend(["", "Discovered Anki profiles"])
+        for index, item in enumerate(data["profiles"], start=1):
+            label = item["name"] or "(unknown)"
+            exists = "found" if item["exists"] else "missing collection file"
+            lines.append(f"  {index}. {label} - {exists}")
+            lines.append(f"     {item['collection_path']}")
+    sync = data["sync"]
+    lines.extend(
+        [
+            "",
+            "Sync",
+            f"  choice: {sync['choice']}",
+            f"  credential storage: {data['credential_storage']['backend']}",
+        ]
+    )
+    if sync["login_result"]:
+        lines.append("  login: saved")
+    if sync["login_error"]:
+        lines.append(f"  login: {sync['login_error']['code']}: {sync['login_error']['message']}")
+    skills = data["skills"]
+    lines.extend(["", "ankicli skill"])
+    if skills["install_result"]:
+        for target in skills["install_result"]["targets"]:
+            lines.append(f"  installed: {target['target']} ({target['bundle']['path']})")
+    elif skills["install_error"]:
+        lines.append(
+            f"  error: {skills['install_error']['code']}: {skills['install_error']['message']}"
+        )
+    else:
+        lines.append("  not installed")
+        lines.append("  do this later: ankicli skill install")
+    lines.extend(["", "Try next"])
+    lines.extend(f"  {step}" for step in data["steps"])
+    if data["target"]["type"] is None:
+        lines.extend(["", "Configure later", "  ankicli configure"])
+    return "\n".join(lines)
+
+
+def _select_configure_target(
+    *,
+    profiles: list[dict],
+    provided_profile: str | None,
+    provided_collection: str | None,
+) -> tuple[str | None, str | None]:
+    if provided_profile or provided_collection:
+        return provided_profile, provided_collection
+    if profiles:
+        recommended = profiles[0]
+        recommended_name = str(recommended["name"] or "this profile")
+        typer.echo("I found your local Anki data.")
+        typer.echo()
+        typer.echo(f"Recommended: use Anki profile '{recommended_name}'.")
+        typer.echo("This saves the normal local Anki collection as your default ankicli workspace.")
+        typer.echo(f"Collection file: {recommended['collection_path']}")
+        typer.echo()
+        typer.echo("Options:")
+        typer.echo("  Enter  use the recommended profile")
+        typer.echo("  n      choose a different profile or collection")
+        typer.echo("  skip   do this later by running: ankicli configure")
+        choice = typer.prompt(
+            f"Use '{recommended_name}'? (recommended)",
+            default="",
+            show_default=False,
+        ).strip()
+        if not choice or choice.lower() in {"y", "yes"}:
+            return recommended_name, None
+        if choice.lower() == "skip":
+            return None, None
+        if choice.lower() not in {"n", "no"}:
+            typer.echo("I did not understand that, so I will show the advanced choices.")
+        typer.echo()
+        typer.echo("Advanced choices:")
+        for index, item in enumerate(profiles, start=1):
+            typer.echo(f"  {index}. {item['name']} ({item['collection_path']})")
+        typer.echo("  skip. do this later by running: ankicli configure")
+        advanced_choice = typer.prompt(
+            "Choose a profile number, paste a collection path, or type skip",
+            default="1",
+            show_default=True,
+        ).strip()
+        if advanced_choice.lower() == "skip":
+            typer.echo("Skipped. You can do this later by running: ankicli configure")
+            return None, None
+        if advanced_choice.isdigit() and 1 <= int(advanced_choice) <= len(profiles):
+            return str(profiles[int(advanced_choice) - 1]["name"]), None
+        return None, advanced_choice
+    typer.echo("I could not find local Anki data automatically.")
+    typer.echo()
+    typer.echo("Recommended: skip collection setup for now.")
+    typer.echo("You can still inspect diagnostics, then set a workspace later.")
+    typer.echo()
+    typer.echo("Options:")
+    typer.echo("  Enter  skip for now; do this later by running: ankicli configure")
+    typer.echo("  path   paste a collection file path manually")
+    collection = typer.prompt(
+        "Skip collection setup? (recommended)",
+        default="",
+        show_default=False,
+    ).strip()
+    if not collection or collection.lower() in {"y", "yes", "skip"}:
+        typer.echo("Skipped. You can do this later by running: ankicli configure")
+        return None, None
+    if collection.lower() in {"path", "p", "n", "no"}:
+        manual_path = typer.prompt(
+            "Paste the collection.anki2 path",
+            default="",
+            show_default=False,
+        )
+        return None, manual_path.strip() or None
+    return None, collection
+
+
+def _collection_for_configure_target(
+    *,
+    profile: str | None,
+    collection: str | None,
+    config,
+) -> str | None:
+    if collection:
+        return collection
+    if profile:
+        return str(ProfileResolver().resolve_profile(profile).collection_path)
+    if config.collection:
+        return config.collection
+    if config.anki_profile:
+        return str(ProfileResolver().resolve_profile(config.anki_profile).collection_path)
+    return None
+
+
+def _render_skill_list(data: dict) -> str:
+    lines = ["Bundled ankicli agent skill"]
+    for item in data["items"]:
+        lines.append(f"  {item['name']}")
+        lines.append(f"    {item['description']}")
+    lines.extend(
+        [
+            "",
+            "Install targets",
+            f"  Codex: {data['targets']['codex']}",
+            f"  Claude Code: {data['targets']['claude']}",
+            f"  OpenClaw: {data['targets']['openclaw']}",
+        ]
+    )
+    if data["detected_targets"]:
+        lines.append(f"  detected: {', '.join(data['detected_targets'])}")
+    else:
+        lines.append("  detected: none")
+    lines.extend(
+        [
+            "",
+            "Try next",
+            "  ankicli skill install --target codex",
+            "  ankicli skill install --target claude",
+            "  ankicli skill install --target openclaw",
+            "  ankicli skill install --path /path/to/skills",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _render_skill_install(data: dict) -> str:
+    lines = ["ankicli skill"]
+    for target in data["targets"]:
+        bundle = target["bundle"]
+        reason = f" ({bundle['reason']})" if bundle.get("reason") else ""
+        lines.append(f"  {target['target']}: {bundle['path']}")
+        lines.append(f"    {bundle['status']}{reason}: {bundle['bundle']}")
+    return "\n".join(lines)
+
+
+def _emit_skill_install_result(settings: Settings, data: dict) -> None:
+    if settings.json_output:
+        emit(settings, data=data)
+        return
+    typer.echo(_render_skill_install(data))
+
+
+def _maybe_install_skills(
+    settings: Settings,
+    *,
+    install_skills: bool,
+    skip_skills: bool,
+    skill_target: str | None,
+    skill_path: str | None,
+) -> dict | None:
+    if install_skills and skip_skills:
+        raise ValidationError("--install-skills and --skip-skills are mutually exclusive")
+    if skill_path and skill_target:
+        raise ValidationError("--skill-path and --skill-target are mutually exclusive")
+    if settings.json_output and not install_skills:
+        return None
+    target = skill_target
+    path = skill_path
+    if not install_skills and not skip_skills and not settings.json_output:
+        detected = detected_skill_targets()
+        typer.echo()
+        typer.echo("ankicli skill")
+        typer.echo("This installs the ankicli umbrella skill for Claude, Codex, or OpenClaw.")
+        if detected:
+            recommended = "all" if len(detected) > 1 else detected[0]
+            target_label = ", ".join(detected)
+            typer.echo(f"Detected agent skill home: {target_label}")
+            typer.echo(
+                f"Recommended: press Enter to install the ankicli skill into {target_label}."
+            )
+            typer.echo()
+            typer.echo("Options:")
+            typer.echo(f"  Enter  install the ankicli skill into {target_label}")
+            typer.echo("  n      skip for now")
+            typer.echo("  path   install to a custom skills directory")
+            choice = typer.prompt(
+                "Install the ankicli skill? (recommended: press Enter)",
+                default="",
+                show_default=False,
+            ).strip()
+            if choice.lower() in {"n", "no", "skip"}:
+                typer.echo("Skipped. You can do this later by running: ankicli skill install")
+                return None
+            if choice.lower() == "path":
+                path = typer.prompt("Paste the skills directory path").strip()
+            else:
+                target = recommended
+        else:
+            typer.echo("I did not find a Codex, Claude Code, or OpenClaw skill home.")
+            typer.echo()
+            typer.echo("Recommended: skip ankicli skill install for now.")
+            typer.echo("You can do this later by running: ankicli skill install --target codex")
+            typer.echo()
+            typer.echo("Options:")
+            typer.echo("  Enter  skip for now")
+            typer.echo("  codex  install the ankicli skill into ~/.codex/skills")
+            typer.echo("  claude install the ankicli skill into ~/.claude/skills")
+            typer.echo("  openclaw install the ankicli skill into ~/.openclaw/skills")
+            typer.echo("  path   install to a custom skills directory")
+            choice = typer.prompt(
+                "Skip ankicli skill install? (recommended)",
+                default="",
+                show_default=False,
+            ).strip()
+            if not choice or choice.lower() in {"y", "yes", "skip"}:
+                typer.echo("Skipped. You can do this later by running: ankicli skill install")
+                return None
+            if choice.lower() == "path":
+                path = typer.prompt("Paste the skills directory path").strip()
+            else:
+                target = choice
+    if skip_skills:
+        return None
+    data = install_agent_skills(target=target or "codex", path=path)
+    if not settings.json_output:
+        typer.echo()
+        typer.echo(_render_skill_install(data))
+    return data
+
+
+def _should_apply_saved_target(ctx: typer.Context) -> bool:
+    return ctx.invoked_subcommand not in {
+        "backend",
+        "catalog",
+        "changelog",
+        "configure",
+        "doctor",
+        "profile",
+        "skill",
+        "workspace",
+    }
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
     collection: Annotated[str | None, typer.Option("--collection")] = None,
     profile: Annotated[str | None, typer.Option("--profile")] = None,
-    backend: Annotated[str, typer.Option("--backend")] = "python-anki",
+    backend: Annotated[str | None, typer.Option("--backend")] = None,
+    workspace: Annotated[
+        str | None,
+        typer.Option(
+            "--workspace",
+            help="Use a named ~/.ankicli workspace for this command.",
+        ),
+    ] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
     no_auto_backup: Annotated[bool, typer.Option("--no-auto-backup")] = False,
+    no_config: Annotated[
+        bool,
+        typer.Option("--no-config", help="Ignore saved ~/.ankicli workspace defaults."),
+    ] = False,
     version: Annotated[
         bool,
         typer.Option("--version", callback=_version_callback, is_eager=True),
     ] = False,
 ) -> None:
     del version
+    selected_workspace = normalize_workspace_name(workspace or active_workspace())
+    if no_config:
+        workspace_config = None
+    else:
+        try:
+            workspace_config = load_workspace_config(selected_workspace)
+        except AnkiCliError as error:
+            _emit_startup_error(
+                backend_name=backend or "python-anki",
+                json_output=json_output,
+                error=error,
+            )
+    resolved_backend = (
+        backend or (workspace_config.backend if workspace_config else None) or "python-anki"
+    )
     if collection and profile:
         _emit_startup_error(
-            backend_name=backend,
+            backend_name=resolved_backend,
             json_output=json_output,
             error=ValidationError("--collection and --profile are mutually exclusive"),
         )
-    resolved_collection = collection
-    resolved_profile = profile
+    resolved_collection, resolved_profile, loaded_config_path, workspace_target_source = (
+        _resolve_config_target(
+            collection=collection,
+            profile=profile,
+            backend=resolved_backend,
+            json_output=json_output,
+            use_config=not no_config and _should_apply_saved_target(ctx),
+            workspace=selected_workspace,
+        )
+    )
     if profile:
-        if backend == "ankiconnect":
+        resolved_profile = profile
+    if resolved_profile:
+        if resolved_backend == "ankiconnect":
             _emit_startup_error(
-                backend_name=backend,
+                backend_name=resolved_backend,
                 json_output=json_output,
                 error=ValidationError("--profile is not supported with the ankiconnect backend"),
             )
         try:
-            context = ProfileResolver().resolve_profile(profile)
+            context = ProfileResolver().resolve_profile(resolved_profile)
         except AnkiCliError as error:
             _emit_startup_error(
-                backend_name=backend,
+                backend_name=resolved_backend,
                 json_output=json_output,
                 error=error,
             )
@@ -175,10 +661,33 @@ def main(
     ctx.obj = Settings(
         collection=resolved_collection,
         profile=resolved_profile,
-        backend_name=backend,
+        backend_name=resolved_backend,
         json_output=json_output,
         no_auto_backup=no_auto_backup,
+        workspace_config_path=loaded_config_path,
+        workspace_target_source=workspace_target_source,
+        workspace=selected_workspace if not no_config else None,
     )
+
+
+@app.command("changelog", help="Show release notes from CHANGELOG.md.")
+def changelog(
+    ctx: typer.Context,
+    include_all: Annotated[
+        bool,
+        typer.Option("--all", help="Show the full changelog instead of the latest section."),
+    ] = False,
+) -> None:
+    settings = get_settings(ctx)
+    try:
+        data = changelog_report(include_all=include_all)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    if settings.json_output:
+        emit(settings, data=data)
+        return
+    typer.echo(data["content"])
 
 
 @doctor_app.command("env", help="Report Python, platform, and Anki import-path diagnostics.")
@@ -325,6 +834,417 @@ def auth_logout(ctx: typer.Context) -> None:
         emit(settings, error=error)
         return
     emit(settings, data=data)
+
+
+@workspace_app.command("path", help="Show where ankicli keeps human-facing workspaces.")
+def workspace_path(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    try:
+        data = workspace_report(settings.workspace)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(settings, data=data)
+
+
+@workspace_app.command("show", help="Show the active or selected ankicli workspace.")
+def workspace_show(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    try:
+        data = workspace_report(settings.workspace)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    data["resolved_collection"] = settings.collection
+    data["resolved_anki_profile"] = settings.profile
+    data["resolved_backend"] = settings.backend_name
+    data["selected_workspace"] = settings.workspace
+    data["active_target_source"] = settings.workspace_target_source
+    emit(settings, data=data)
+
+
+@workspace_app.command("list", help="List saved ankicli workspaces.")
+def workspace_list(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    active = active_workspace()
+    emit(
+        settings,
+        data={
+            "active_workspace": active,
+            "items": [
+                {
+                    "name": name,
+                    "active": name == active,
+                    **workspace_item(name),
+                }
+                for name in list_workspaces()
+            ],
+        },
+    )
+
+
+@workspace_app.command("use", help="Set the active ankicli workspace.")
+def workspace_use(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Option("--name")],
+) -> None:
+    settings = get_settings(ctx)
+    try:
+        normalized_name = normalize_workspace_name(name)
+        config = load_workspace_config(normalized_name)
+        config_path = save_workspace_config(config, normalized_name)
+        active_path = set_active_workspace(normalized_name)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(
+        settings,
+        data={
+            "saved": True,
+            "active_workspace_path": str(active_path),
+            "config_path": str(config_path),
+            **workspace_report(normalized_name, config),
+        },
+    )
+
+
+@workspace_app.command("set", help="Save profile, collection, or backend choices.")
+def workspace_set(
+    ctx: typer.Context,
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Workspace to update. Defaults to the active workspace."),
+    ] = None,
+    profile: Annotated[str | None, typer.Option("--profile")] = None,
+    collection: Annotated[str | None, typer.Option("--collection")] = None,
+    backend: Annotated[str | None, typer.Option("--backend")] = None,
+    activate: Annotated[
+        bool,
+        typer.Option("--activate", help="Make this workspace active after saving."),
+    ] = False,
+) -> None:
+    settings = get_settings(ctx)
+    if profile and collection:
+        emit(settings, error=ValidationError("--profile and --collection are mutually exclusive"))
+        return
+    if not any((profile, collection, backend)):
+        emit(
+            settings,
+            error=ValidationError(
+                "workspace set requires at least one of --profile, --collection, or --backend",
+            ),
+        )
+        return
+    try:
+        workspace_name = normalize_workspace_name(name or active_workspace())
+        config = load_workspace_config(workspace_name)
+        if profile is not None:
+            config.anki_profile = profile
+            config.collection = None
+        if collection is not None:
+            config.collection = collection
+            config.anki_profile = None
+        if backend is not None:
+            config.backend = backend
+        config_path = save_workspace_config(config, workspace_name)
+        if activate:
+            set_active_workspace(workspace_name)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(
+        settings,
+        data={
+            "saved": True,
+            "config_path": str(config_path),
+            "updated_workspace": workspace_name,
+            **workspace_report(workspace_name, config),
+        },
+    )
+
+
+@workspace_app.command("clear", help="Clear saved values from an ankicli workspace.")
+def workspace_clear(
+    ctx: typer.Context,
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Workspace to clear. Defaults to the active workspace."),
+    ] = None,
+    target: Annotated[
+        bool,
+        typer.Option("--target", help="Clear saved profile/collection."),
+    ] = False,
+    backend: Annotated[bool, typer.Option("--backend", help="Clear saved backend.")] = False,
+    all_values: Annotated[bool, typer.Option("--all", help="Clear all saved defaults.")] = False,
+) -> None:
+    settings = get_settings(ctx)
+    if not any((target, backend, all_values)):
+        emit(
+            settings,
+            error=ValidationError("workspace clear requires --target, --backend, or --all"),
+        )
+        return
+    try:
+        workspace_name = normalize_workspace_name(name or active_workspace())
+        config = load_workspace_config(workspace_name)
+        if target or all_values:
+            config.anki_profile = None
+            config.collection = None
+        if backend or all_values:
+            config.backend = None
+        config_path = save_workspace_config(config, workspace_name)
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    emit(
+        settings,
+        data={
+            "saved": True,
+            "config_path": str(config_path),
+            "updated_workspace": workspace_name,
+            **workspace_report(workspace_name, config),
+        },
+    )
+
+
+@skill_app.command(
+    "list",
+    help="List the bundled ankicli umbrella skill and known install targets.",
+)
+def skill_list(ctx: typer.Context) -> None:
+    settings = get_settings(ctx)
+    data = skill_list_payload()
+    if settings.json_output:
+        emit(settings, data=data)
+        return
+    typer.echo(_render_skill_list(data))
+
+
+@skill_app.command(
+    "install",
+    help="Install the bundled ankicli umbrella skill into an agent skill home.",
+)
+def skill_install(
+    ctx: typer.Context,
+    target: Annotated[
+        str | None,
+        typer.Option(
+            "--target",
+            help=(
+                "Install target: codex, claude, openclaw, or all. "
+                "Defaults to codex when --path is absent."
+            ),
+        ),
+    ] = None,
+    path: Annotated[
+        str | None,
+        typer.Option("--path", help="Custom skills root to install into."),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Overwrite an existing local ankicli skill bundle."),
+    ] = False,
+) -> None:
+    settings = get_settings(ctx)
+    try:
+        data = install_agent_skills(
+            target=target,
+            path=path,
+            overwrite=overwrite,
+        )
+    except AnkiCliError as error:
+        emit(settings, error=error)
+        return
+    _emit_skill_install_result(settings, data)
+
+
+def _run_configure_wizard(
+    settings: Settings,
+    *,
+    title: str,
+    save_default_profile: bool,
+    workspace: str | None,
+    profile: str | None,
+    collection: str | None,
+    login: bool,
+    skip_sync: bool,
+    username: str | None,
+    password: str | None,
+    endpoint: str | None,
+    install_skills: bool,
+    skip_skills: bool,
+    skill_target: str | None,
+    skill_path: str | None,
+) -> None:
+    if profile and collection:
+        emit(settings, error=ValidationError("--profile and --collection are mutually exclusive"))
+        return
+    if login and skip_sync:
+        emit(settings, error=ValidationError("--login and --skip-sync are mutually exclusive"))
+        return
+    saved = False
+    saved_error: dict | None = None
+    login_result: dict | None = None
+    login_error: dict | None = None
+    skill_result: dict | None = None
+    skill_error: dict | None = None
+    sync_choice = "skipped"
+    detected_default_profile: dict | None = None
+    workspace_name = normalize_workspace_name(workspace or active_workspace())
+    profiles, discovery_error = _discover_profile_items()
+    try:
+        if save_default_profile and not profile and not collection:
+            detected_default_profile = ProfileResolver().default_profile().to_dict()
+            profile = detected_default_profile["name"]
+        if not settings.json_output:
+            typer.echo(title)
+            typer.echo()
+            typer.echo("This will find your local Anki collection, save a workspace target,")
+            typer.echo("and optionally store AnkiWeb sync credentials.")
+            typer.echo()
+            profile, collection = _select_configure_target(
+                profiles=profiles,
+                provided_profile=profile,
+                provided_collection=collection,
+            )
+        if profile or collection:
+            config = load_workspace_config(workspace_name)
+            if profile:
+                config.anki_profile = profile
+                config.collection = None
+            if collection:
+                config.collection = collection
+                config.anki_profile = None
+            save_workspace_config(config, workspace_name)
+            set_active_workspace(workspace_name)
+            saved = True
+        else:
+            config = load_workspace_config(workspace_name)
+    except AnkiCliError as error:
+        saved_error = _error_dict(error)
+        config = load_workspace_config(workspace_name)
+    if saved_error is None:
+        try:
+            collection_for_login = _collection_for_configure_target(
+                profile=profile,
+                collection=collection,
+                config=config,
+            )
+        except AnkiCliError as error:
+            collection_for_login = None
+            login_error = _error_dict(error)
+        if collection_for_login is None:
+            sync_choice = "target_required"
+        elif skip_sync:
+            sync_choice = "skipped"
+        elif login or (
+            not settings.json_output and typer.confirm("Log in to AnkiWeb sync now?", default=False)
+        ):
+            sync_choice = "login"
+            username_value = username or typer.prompt("AnkiWeb username")
+            password_value = password or typer.prompt("AnkiWeb password", hide_input=True)
+            try:
+                backend = get_backend(settings.backend_name)
+                login_result = AuthService(backend).login(
+                    collection_for_login,
+                    username=username_value,
+                    password=password_value,
+                    endpoint=endpoint,
+                )
+            except AnkiCliError as error:
+                login_error = _error_dict(error)
+    try:
+        skill_result = _maybe_install_skills(
+            settings,
+            install_skills=install_skills,
+            skip_skills=skip_skills,
+            skill_target=skill_target,
+            skill_path=skill_path,
+        )
+    except AnkiCliError as error:
+        skill_error = _error_dict(error)
+    data = _configure_payload(
+        settings,
+        workspace_name=workspace_name,
+        profiles=profiles,
+        discovery_error=discovery_error,
+        saved=saved,
+        save_error=saved_error,
+        sync_choice=sync_choice,
+        detected_default_profile=detected_default_profile,
+        login_result=login_result,
+        login_error=login_error,
+        skill_result=skill_result,
+        skill_error=skill_error,
+    )
+    if not settings.json_output:
+        typer.echo()
+        typer.echo(_render_configure(data))
+        return
+    emit(settings, data=data)
+
+
+@app.command("configure", help="Configure an ankicli workspace and optional AnkiWeb sync.")
+def configure(
+    ctx: typer.Context,
+    save_default_profile: Annotated[
+        bool,
+        typer.Option("--save-default-profile", help="Detect and save the default Anki profile."),
+    ] = False,
+    workspace: Annotated[
+        str | None,
+        typer.Option(
+            "--workspace",
+            help="Workspace to update. Defaults to the active workspace.",
+        ),
+    ] = None,
+    profile: Annotated[str | None, typer.Option("--profile")] = None,
+    collection: Annotated[str | None, typer.Option("--collection")] = None,
+    login: Annotated[
+        bool,
+        typer.Option("--login", help="Log in to AnkiWeb sync during configuration."),
+    ] = False,
+    skip_sync: Annotated[
+        bool,
+        typer.Option("--skip-sync", help="Skip AnkiWeb sync login during configuration."),
+    ] = False,
+    username: Annotated[str | None, typer.Option("--username")] = None,
+    password: Annotated[str | None, typer.Option("--password", hide_input=True)] = None,
+    endpoint: Annotated[str | None, typer.Option("--endpoint")] = None,
+    install_skills: Annotated[
+        bool,
+        typer.Option("--install-skills", help="Install bundled ankicli agent skills during setup."),
+    ] = False,
+    skip_skills: Annotated[
+        bool,
+        typer.Option("--skip-skills", help="Skip the agent skill install step during setup."),
+    ] = False,
+    skill_target: Annotated[
+        str | None,
+        typer.Option("--skill-target", help="Skill install target: codex, claude, or all."),
+    ] = None,
+    skill_path: Annotated[
+        str | None,
+        typer.Option("--skill-path", help="Custom skills root for the setup skill install step."),
+    ] = None,
+) -> None:
+    _run_configure_wizard(
+        get_settings(ctx),
+        title="ankicli configure",
+        save_default_profile=save_default_profile,
+        workspace=workspace,
+        profile=profile,
+        collection=collection,
+        login=login,
+        skip_sync=skip_sync,
+        username=username,
+        password=password,
+        endpoint=endpoint,
+        install_skills=install_skills,
+        skip_skills=skip_skills,
+        skill_target=skill_target,
+        skill_path=skill_path,
+    )
 
 
 @profile_app.command("list", help="List local Anki profiles from the Anki2 data root.")

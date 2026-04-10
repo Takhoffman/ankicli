@@ -1,4 +1,4 @@
-import { installerScripts, platformCards, rawBaseUrl } from "./install";
+import { installerScripts, platformCards } from "./install";
 
 export type CommandBlock = {
   label: string;
@@ -25,144 +25,47 @@ export type DocPage = {
 const verifyBlock = "ankicli --version\nankicli --json doctor env\nankicli --json doctor backend";
 const cliHelpBlock =
   "ankicli --help\nankicli profile --help\nankicli search --help\nankicli note --help\nankicli backup --help\nankicli sync --help\nankicli study --help";
-const publicSkillBase = `${rawBaseUrl}/skills`;
-
-function skillUrl(skillId: string): string {
-  return `${publicSkillBase}/${skillId}/SKILL.md`;
-}
-
-function codexSkillInstallBlock(skillId: string): string {
-  return `mkdir -p ~/.codex/skills/${skillId}\ncurl -fsSL ${skillUrl(skillId)} -o ~/.codex/skills/${skillId}/SKILL.md`;
-}
-
-function codexSkillInstallBlockWindows(skillId: string): string {
-  return `New-Item -ItemType Directory -Force \"$HOME/.codex/skills/${skillId}\" | Out-Null\nInvoke-WebRequest ${skillUrl(skillId)} -OutFile \"$HOME/.codex/skills/${skillId}/SKILL.md\"`;
-}
-
-const collectionSkillBody = `---
-name: ankicli-collection-management
-description: Teach the agent how to inspect and manage collection and deck state through ankicli.
+const umbrellaSkillBody = `---
+name: ankicli
+description: Use when an agent needs to inspect, study, create, modify, organize, sync, or troubleshoot an Anki collection through ankicli. Covers setup, study workflows, note authoring, collection and deck management, diagnostics, sync and backups, and goal-driven learning plans.
 ---
 
-Read first, dry-run deck writes when supported, and re-verify after mutation.
+Use ankicli as the local source of truth for Anki operations.
 
-Prefer:
+## Core operating rules
 
-- \`ankicli --json ... collection info\`
-- \`ankicli --json ... deck list\`
-- \`ankicli --json ... deck stats --name <deck>\`
-- \`ankicli --json ... search preview --kind notes --query 'deck:<deck>'\`
+1. Confirm runtime, backend, and target readiness first.
+2. Prefer \`--json\` in agent-driven workflows.
+3. Prefer read, search, and preview commands before mutation.
+4. Use \`--dry-run\` where supported before real writes.
+5. Treat structured ankicli error codes and capability flags as authoritative.
+6. Distinguish sync from backup.
+7. Prefer saved workspace config for routine use.
 
-## Rules
-
-1. Inspect collection and deck state before mutating.
-2. Keep deck operations narrowly scoped.
-3. Re-run deck or collection reads after successful writes.
-4. For deck create, rename, delete, or reparent operations, use \`--dry-run\` or \`--yes\` as required and explain backend support gaps before attempting the mutation.`;
-
-const authoringSkillBody = `---
-name: ankicli-note-authoring
-description: Teach the agent how to add, inspect, update, and retag notes safely through ankicli.
----
-
-Find the target note first, validate structure mentally, and re-read after writes.
-
-Prefer:
-
-- \`ankicli --json ... search preview --kind notes --query ...\`
-- \`ankicli --json ... note add ...\`
-- \`ankicli --json ... note update ...\`
-- \`ankicli --json ... note add-tags ...\`
-
-## Rules
-
-1. Search or inspect before mutating an existing note.
-2. Use \`--dry-run\` for adds, updates, retagging, deletes, and moves when available.
-3. Treat deletes and broad retagging as explicit user intent only.
-4. Re-read the note or preview the target set after successful writes so the operator can verify the final state.`;
-
-const studySkillBody = `---
-name: ankicli-study
-description: Teach the agent how to run tutor-style Anki study sessions through ankicli.
----
-
-Use the primary study workflows first and keep tutoring separate from collection mutation.
-
-Prefer:
-
-- \`ankicli --json ... collection info\`
-- \`ankicli --json ... study start ...\`
-- \`ankicli --json study details\`
-- \`ankicli --json study reveal\`
-- \`ankicli --json study grade --rating ...\`
-- \`ankicli --json study summary\`
-
-## Rules
-
-1. Start with the narrowest deck or query scope that matches the learner goal.
-2. Use \`study details\` as the default current-card read for the front side, and use \`study reveal\` when the user asks for the answer or back side.
-3. Present study cards like Anki by default: focus on the prompt and front-side clues first, and do not volunteer the answer until after \`study reveal\`.
-4. Present grading choices in this order when guiding the learner: 1. Again 2. Hard 3. Good 4. Easy.
-5. Treat study-session state as the tutoring source of truth unless the workflow explicitly says it writes back to Anki.
-6. Explain misses in study terms and patterns instead of dumping raw database fields.
-
-## Anti-Patterns
-
-- Do not default to low-level note or deck mutations when the user asked to study.
-- Do not skip \`study reveal\` when the user asks for the answer or when grading requires a revealed card.`;
-
-const diagnosticsSkillBody = `---
-name: ankicli-diagnostics
-description: Teach the agent how to diagnose ankicli runtime, backend, collection, and capability issues.
----
-
-Treat structured ankicli errors as authoritative and distinguish setup problems from unsupported behavior.
-
-Prefer:
+## Baseline checks
 
 - \`ankicli --json doctor env\`
 - \`ankicli --json doctor backend\`
-- \`ankicli --json doctor capabilities\`
-- \`ankicli --json ... collection info\`
+- \`ankicli --json profile list\`
+- \`ankicli --json workspace show\`
 
-## Rules
+## Read the right reference
 
-1. Confirm runtime, backend, and collection readiness first.
-2. Differentiate missing setup from backend operation support gaps.
-3. If one backend fails, check whether the alternate backend is intended and supported before retrying a write.
-4. Preserve structured error codes and capability reasons verbatim instead of paraphrasing them into vague summaries.`;
+- Read \`references/setup.md\` for install verification, \`ankicli configure\`, workspaces, auth, and skill installation.
+- Read \`references/study.md\` for tutor-style study sessions, reveal flow, grading, and summaries.
+- Read \`references/note-authoring.md\` for note creation, update, tagging, moving, and media-enrichment workflows.
+- Read \`references/collection-management.md\` for collection inspection, decks, tags, and maintenance-style operations.
+- Read \`references/diagnostics.md\` for runtime, profile, backend, capability, and collection troubleshooting.
+- Read \`references/sync-and-backups.md\` for auth status, sync preflight, backup creation, and restore safety.
+- Read \`references/learning-plans.md\` for travel, anime immersion, exam prep, and time-budgeted study-planning workflows.`;
 
-const releaseSkillBody = `---
-name: ankicli-release
-description: Teach the agent how to prepare and validate ankicli release and packaging work.
----
-
-Treat releases as packaging-sensitive changes. Confirm version, build, distribution tests, standalone artifacts, installer checksum behavior, and tag-triggered GitHub Release publishing before recommending a release.
-
-Prefer:
-
-- \`uv sync --extra dev --frozen\`
-- \`uv run ruff check .\`
-- \`uv run pytest -m "unit or smoke"\`
-- \`uv build\`
-- \`uv run pytest -m distribution\`
-- \`uv run python scripts/build_release_artifact.py --target <target> --version <version>\`
-
-## Rules
-
-1. Start with the current version in \`pyproject.toml\` and the installed command name: the PyPI distribution is \`anki-agent-toolkit\`, while the executable is \`ankicli\`.
-2. Treat \`uv.lock\` as mandatory. If dependency resolution changes, update and include the lockfile in the same release-prep change.
-3. Run the smallest useful release gate first, then broaden to packaging checks: \`uv run pytest -m "unit or smoke"\`, \`uv build\`, and \`uv run pytest -m distribution\`.
-4. For standalone release artifacts, use \`scripts/build_release_artifact.py\` and target only supported release IDs: \`darwin-x64\`, \`darwin-arm64\`, \`linux-x64\`, and \`windows-x64\`.
-5. Verify artifact names and checksums match the contract in \`ankicli.app.releases\` before publishing or advising a manual upload.
-6. Treat installer checksum mismatch, missing executable payloads, or failed distribution tests as release-blocking.
-7. GitHub Releases are tag-triggered from \`v*\`; do not push a release tag or publish artifacts unless the operator explicitly asks for that release action.
-
-## Anti-Patterns
-
-- Do not describe an editable install, fixture integration run, or smoke test alone as proof that a release artifact is valid.
-- Do not change the PyPI distribution name or executable name casually during release prep.
-- Do not upload or publish artifacts when build, checksum, or distribution validation is incomplete.`;
+const umbrellaReferenceMap = `references/setup.md
+references/study.md
+references/note-authoring.md
+references/collection-management.md
+references/diagnostics.md
+references/sync-and-backups.md
+references/learning-plans.md`;
 
 function installCommandFor(platformId: "macos" | "linux" | "windows"): string {
   const platform = platformCards.find((item) => item.id === platformId);
@@ -177,94 +80,79 @@ export const docsPages: Record<string, DocPage> = {
     title: "Agent skills",
     eyebrow: "Skills",
     summary:
-      "Use these standalone ankicli skills when you want the OpenClaw-style Anki skills in a public, harness-agnostic form that can be copied into Codex or another compatible skill home today.",
+      "Use the single bundled ankicli umbrella skill when you want a public, harness-agnostic agent operating guide for Codex, Claude Code, OpenClaw, or another compatible skill home today.",
     helper: "Paste this page into your LLM chat or copy a specific skill file directly.",
     whenToUse: [
-      "You want the existing Anki skill ideas without depending on the OpenClaw plugin bundle.",
-      "You want a stable public repo path and copy-paste install flow for Codex or another compatible agent harness.",
+      "You want one installable skill instead of choosing between multiple ankicli sub-skills.",
+      "You want a stable CLI install flow for Codex, Claude Code, OpenClaw, or another compatible agent harness.",
     ],
     agentShouldKnow: [
-      "These skills are generic copies of the existing OpenClaw-oriented skill concepts, rewritten around ankicli commands instead of plugin-only tool names.",
-      "Humans can install one or more skills into a local skill home, then hand the docs or skill files to the agent for recurring Anki work.",
+      "The public skill surface is now one umbrella skill named `ankicli`.",
+      "Use the umbrella SKILL.md to choose the right reference file instead of treating study, note authoring, diagnostics, or collection management as separate install-time choices.",
     ],
     sections: [
       {
         heading: "What this page ships",
         body: [
-          "The canonical public copies live under the repo-top `skills/` folder. That makes them easy to link, curl, and copy without exposing hidden repo-local paths or waiting for the plugin release.",
-          "You can install them directly into a Codex home today, or just copy the `SKILL.md` body from this page and self-create the file manually.",
+          "The canonical public copy lives under `skills/ankicli/` and is bundled into the ankicli package. That makes it installable through `ankicli skill install` without waiting for the plugin release.",
+          "The skill uses progressive disclosure: one `SKILL.md` plus focused files under `references/` for setup, study, authoring, diagnostics, sync, and learning plans.",
         ],
         commands: [
           {
-            label: "Public skill files",
-            body: `skills/ankicli-collection-management/SKILL.md\nskills/ankicli-note-authoring/SKILL.md\nskills/ankicli-study/SKILL.md\nskills/ankicli-diagnostics/SKILL.md\nskills/ankicli-release/SKILL.md`,
+            label: "Public skill bundle",
+            body: `skills/ankicli/SKILL.md\n${umbrellaReferenceMap}`,
           },
         ],
         bullets: [
-          "The OpenClaw plugin copies can stay where they are for now.",
-          "These top-level copies are the public source of truth for standalone install and docs.",
+          "This umbrella skill is the public source of truth for standalone skill install and docs.",
+          "The OpenClaw plugin remains a separate future/richer integration path, not the primary install path right now.",
         ],
       },
       {
-        heading: "Install ankicli-collection-management",
+        heading: "Install the ankicli skill",
         body: [
-          "Use this when the agent needs to inspect deck state, verify collection readiness, and keep deck mutations narrow and reversible.",
+          "Install the same umbrella skill into whatever agent home you use. The skill itself decides which reference file to read for the current task.",
         ],
         commands: [
-          { label: "Install into Codex home (macOS/Linux)", body: codexSkillInstallBlock("ankicli-collection-management") },
-          { label: "Install into Codex home (Windows PowerShell)", body: codexSkillInstallBlockWindows("ankicli-collection-management") },
-          { label: "SKILL.md", body: collectionSkillBody },
+          { label: "Install into Codex home", body: "ankicli skill install --target codex" },
+          { label: "Install into Claude Code home", body: "ankicli skill install --target claude" },
+          { label: "Install into OpenClaw home", body: "ankicli skill install --target openclaw" },
+          { label: "Install everywhere detected", body: "ankicli skill install --target all" },
+          { label: "Install into a custom path", body: "ankicli skill install --path /path/to/skills" },
         ],
       },
       {
-        heading: "Install ankicli-note-authoring",
+        heading: "Umbrella SKILL.md",
         body: [
-          "Use this when the agent needs to add, update, and retag notes through ankicli without skipping search, preview, or dry-run safety steps.",
+          "This is the only top-level SKILL.md the operator installs. It stays short and routes the agent to the relevant reference file for the task at hand.",
         ],
         commands: [
-          { label: "Install into Codex home (macOS/Linux)", body: codexSkillInstallBlock("ankicli-note-authoring") },
-          { label: "Install into Codex home (Windows PowerShell)", body: codexSkillInstallBlockWindows("ankicli-note-authoring") },
-          { label: "SKILL.md", body: authoringSkillBody },
+          { label: "SKILL.md", body: umbrellaSkillBody },
         ],
       },
       {
-        heading: "Install ankicli-study",
+        heading: "Reference files",
         body: [
-          "Use this when the agent should behave like a tutor over ankicli study mode instead of dropping into raw note or deck mutation flows.",
+          "These files provide progressive disclosure. The umbrella skill should read only the references needed for the current task instead of loading every workflow at once.",
         ],
         commands: [
-          { label: "Install into Codex home (macOS/Linux)", body: codexSkillInstallBlock("ankicli-study") },
-          { label: "Install into Codex home (Windows PowerShell)", body: codexSkillInstallBlockWindows("ankicli-study") },
-          { label: "SKILL.md", body: studySkillBody },
+          { label: "Reference files", body: umbrellaReferenceMap },
         ],
-      },
-      {
-        heading: "Install ankicli-diagnostics",
-        body: [
-          "Use this when the agent needs a debugging skill for runtime health, backend support gaps, profile targeting, and structured ankicli failures.",
-        ],
-        commands: [
-          { label: "Install into Codex home (macOS/Linux)", body: codexSkillInstallBlock("ankicli-diagnostics") },
-          { label: "Install into Codex home (Windows PowerShell)", body: codexSkillInstallBlockWindows("ankicli-diagnostics") },
-          { label: "SKILL.md", body: diagnosticsSkillBody },
-        ],
-      },
-      {
-        heading: "Install ankicli-release",
-        body: [
-          "Use this when the agent needs to prepare release changes, validate packaging, check standalone artifacts, or reason about tag-triggered GitHub Release publishing.",
-        ],
-        commands: [
-          { label: "Install into Codex home (macOS/Linux)", body: codexSkillInstallBlock("ankicli-release") },
-          { label: "Install into Codex home (Windows PowerShell)", body: codexSkillInstallBlockWindows("ankicli-release") },
-          { label: "SKILL.md", body: releaseSkillBody },
+        bullets: [
+          "`setup.md`: install verification, configure, workspaces, auth, and skill install",
+          "`study.md`: tutor-style sessions, reveal flow, grading, summaries",
+          "`note-authoring.md`: note creation, updates, tags, moves, media workflows",
+          "`collection-management.md`: decks, tags, collection inspection, maintenance",
+          "`diagnostics.md`: doctor commands, profile/runtime/backend/capability failures",
+          "`sync-and-backups.md`: sync preflight, auth, backup and restore safety",
+          "`learning-plans.md`: travel, anime immersion, exam prep, medical-student workflows",
         ],
       },
       {
         heading: "How to use them",
         body: [
-          "A good operator pattern is: install ankicli, verify the local runtime, install one or more of these skills into the local skill home, then hand the matching docs page or `Copy Page` output to the agent.",
-          "The skills are intentionally narrow. Use the study skill for tutoring, the note-authoring skill for content changes, the collection-management skill for deck state, the diagnostics skill when the environment is suspect, and the release skill for packaging or publish readiness.",
+          "A good operator pattern is: install ankicli, verify the local runtime, install the umbrella skill into the local skill home, then hand the matching docs page or `Copy Page` output to the agent.",
+          "The agent should treat the references as internal task-routing, not as install-time choices the operator has to make.",
         ],
         commands: [
           {
@@ -805,6 +693,7 @@ export const docsPages: Record<string, DocPage> = {
     agentShouldKnow: [
       "ankicli is JSON-first and should usually be called with --json in automation contexts.",
       "Humans normally handle install and initial verification. Agents handle the day-to-day commands after the environment is confirmed healthy.",
+      "Human-facing workspace config lives under ~/.ankicli/workspaces/<name>/config.json; sync credentials live separately in the OS keyring or platform fallback store.",
     ],
     sections: [
       {
@@ -822,17 +711,58 @@ export const docsPages: Record<string, DocPage> = {
         body: [
           "Run these commands before giving ankicli to an agent. They confirm the executable works, the packaged runtime is healthy, and the local environment can be inspected safely.",
         ],
-        commands: [{ label: "Verification", body: verifyBlock }],
+        commands: [
+          {
+            label: "Verification",
+            body: `${verifyBlock}\nankicli configure`,
+          },
+        ],
       },
       {
-        heading: "First safe collection checks",
+        heading: "Save a default target",
         body: [
-          "After verification, inspect the available profiles and resolve the one you actually want. Prefer profile-aware commands for normal local use.",
+          "Use the configure wizard first. It finds local Anki profiles, recommends the likely default collection, saves the workspace target, lets you log in to AnkiWeb or skip sync, and offers to install bundled agent skills. If you skip, rerun the same command when you are ready.",
         ],
         commands: [
           {
-            label: "Profile-aware flow",
-            body: 'ankicli --json profile list\nankicli --json profile default\nankicli --json --profile "User 1" collection info',
+            label: "Guided setup",
+            body: "ankicli configure\nankicli --json workspace show\nankicli --json collection info",
+          },
+        ],
+      },
+      {
+        heading: "Manual profile setup",
+        body: [
+          "If you already know the exact profile or collection target, you can skip the wizard and save it directly. This is useful for agent harness setup scripts and repeatable test environments.",
+        ],
+        commands: [
+          {
+            label: "Profile-aware setup",
+            body: 'ankicli --json profile list\nankicli --json profile default\nankicli workspace set --profile "User 1"\nankicli --json workspace show\nankicli --json collection info',
+          },
+        ],
+      },
+      {
+        heading: "Create workflow-specific workspaces",
+        body: [
+          "Use additional ankicli workspaces when one operator has different targets, for example a main deck, a travel-learning deck, and a disposable test collection.",
+        ],
+        commands: [
+          {
+            label: "Named workspace",
+            body: 'ankicli workspace set --name travel --profile "Travel" --activate\nankicli --json collection info\nankicli --workspace default --json collection info\nankicli workspace use --name default',
+          },
+        ],
+      },
+      {
+        heading: "Use auth after a target is saved",
+        body: [
+          "auth login needs a real collection target because the python-anki sync login flow works through the collection runtime. Save a profile or collection first, then run auth.",
+        ],
+        commands: [
+          {
+            label: "Auth setup",
+            body: "ankicli auth status\nankicli auth login\nankicli --json sync status",
           },
         ],
       },
@@ -849,7 +779,7 @@ export const docsPages: Record<string, DocPage> = {
       "You need to choose between --profile and --collection in a script or agent workflow.",
     ],
     agentShouldKnow: [
-      "Use --profile for ordinary local-user flows. Use --collection only when exact file targeting matters.",
+      "Use saved ankicli workspaces for ordinary local-user flows. Use --collection only when exact file targeting matters.",
       "Profile resolution is platform-aware and is safer than hard-coding Anki paths when the operator has a normal local setup.",
     ],
     sections: [
@@ -861,7 +791,7 @@ export const docsPages: Record<string, DocPage> = {
         commands: [
           {
             label: "Profile inspection",
-            body: 'ankicli --json profile list\nankicli --json profile default\nankicli --json profile resolve --name "User 1"',
+            body: 'ankicli --json profile list\nankicli --json profile default\nankicli --json profile resolve --name "User 1"\nankicli workspace set --profile "User 1"\nankicli workspace set --name travel --profile "Travel"\nankicli --json workspace list',
           },
         ],
       },
@@ -873,7 +803,7 @@ export const docsPages: Record<string, DocPage> = {
         commands: [
           {
             label: "Collection-targeted inspection",
-            body: "ankicli --json --collection /path/to/collection.anki2 collection info\nankicli --json --collection /path/to/collection.anki2 deck stats --name Default",
+            body: "ankicli workspace set --collection /path/to/collection.anki2\nankicli --json collection info\nankicli --json deck stats --name Default",
           },
         ],
       },
@@ -881,7 +811,10 @@ export const docsPages: Record<string, DocPage> = {
         heading: "Troubleshooting hints",
         body: ["If a profile does not resolve, inspect the profile list and the resolved data root before assuming the collection is missing."],
         bullets: [
+          "Human-facing workspace config lives under `~/.ankicli/workspaces/<name>/config.json`.",
           "Run `ankicli --json doctor env` to inspect the default Anki root.",
+          "Run `ankicli --json workspace path` to inspect the saved workspace location.",
+          "Run `ankicli --json workspace list` to inspect named workspaces.",
           "Use `profile list` before hard-coding a collection path.",
         ],
       },
@@ -908,7 +841,7 @@ export const docsPages: Record<string, DocPage> = {
         commands: [
           {
             label: "Sync preflight",
-            body: 'ankicli --json auth status\nankicli --json --profile "User 1" sync status',
+            body: 'ankicli --json auth status\nankicli auth login\nankicli --json sync status',
           },
         ],
       },
@@ -918,13 +851,13 @@ export const docsPages: Record<string, DocPage> = {
         commands: [
           {
             label: "Local backup flow",
-            body: 'ankicli --json --profile "User 1" backup status\nankicli --json --profile "User 1" backup list\nankicli --json --profile "User 1" backup create',
+            body: "ankicli --json backup status\nankicli --json backup list\nankicli --json backup create",
           },
         ],
       },
       {
         heading: "Caveats",
-        body: ["The sync backend is standalone for python-anki. Credentials are stored locally through the supported credential store on each platform."],
+        body: ["The sync backend is standalone for python-anki. Credentials are stored locally through the supported credential store on each platform, not in ~/.ankicli/workspaces/<name>/config.json."],
         bullets: [
           "Use `sync pull` and `sync push` only when you explicitly want expert-level direction control.",
           "Use `backup restore` only when the operator clearly intends a local rollback and understands the safety implications.",
@@ -1059,7 +992,7 @@ export const docsPages: Record<string, DocPage> = {
     helper: "Paste this page into your LLM chat for structured context.",
     whenToUse: [
       "You want the recommended install path for a human operator.",
-      "You want a consistent command to paste into docs, onboarding notes, or an LLM chat.",
+      "You want a consistent command to paste into docs, setup notes, or an LLM chat.",
     ],
     agentShouldKnow: [
       "Humans should usually install ankicli through the first-party script and verify it before handing the environment to an agent.",

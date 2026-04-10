@@ -11,11 +11,15 @@ from tests.fixtures.build_fixture import build_fixture
 
 
 class AppRunner:
-    def __init__(self, app_runner: CliRunner) -> None:
+    def __init__(self, app_runner: CliRunner, *, config_home: Path) -> None:
         self._runner = app_runner
+        self._config_home = config_home
 
-    def invoke(self, *, args: list[str], input: str | None = None):
-        result = self._runner.invoke(app, args, input=input)
+    def invoke(self, *, args: list[str], input: str | None = None, env: dict | None = None):
+        merged_env = {"ANKICLI_CONFIG_HOME": str(self._config_home)}
+        if env:
+            merged_env.update(env)
+        result = self._runner.invoke(app, args, input=input, env=merged_env)
         if "blocked main thread" in result.stdout and any(
             flag in args for flag in ("--json", "--ndjson")
         ):
@@ -28,8 +32,8 @@ class AppRunner:
 
 
 @pytest.fixture()
-def runner() -> AppRunner:
-    return AppRunner(CliRunner())
+def runner(tmp_path) -> AppRunner:
+    return AppRunner(CliRunner(), config_home=tmp_path / "ankicli-config")
 
 
 @pytest.fixture()
