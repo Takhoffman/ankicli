@@ -170,14 +170,15 @@ service layer, JSON-first responses, and a backend seam present from day one.
     - `backend test-connection`
     - `collection info`
     - `collection stats`
-    - `deck list|get|stats`
+    - `deck list|get|stats|create|rename|delete|reparent`
     - `model list|get|fields|templates|validate-note`
-    - `tag list|apply|remove`
+    - `tag list|rename|delete|reparent|apply|remove`
+    - `media list|check|attach|resolve-path`
     - `search notes|cards|count|preview`
     - `export notes|cards`
     - `import notes`
     - `import patch`
-    - `note get|fields|add|update|move-deck|add-tags|remove-tags`
+    - `note get|fields|add|update|delete|move-deck|add-tags|remove-tags`
     - `card get|suspend|unsuspend`
   - does not support yet:
     - `auth status|login|logout`
@@ -186,13 +187,12 @@ service layer, JSON-first responses, and a backend seam present from day one.
     - `sync status|run|pull|push`
     - `doctor collection|safety`
     - `collection validate|lock-status`
-    - `note delete`
-    - `deck create|rename|delete|reparent`
-    - `tag rename|delete|reparent`
-    - `media list|check|attach|orphaned|resolve-path`
+    - `media orphaned`
   - expects a running Anki desktop instance with AnkiConnect reachable at
     `http://127.0.0.1:8765` by default
   - does not require `--collection`
+  - is the preferred backend for live desktop note/deck/tag/media mutation
+  - still cannot replace `python-anki` for sync auth, sync execution, backups, or orphaned-media inspection
 - `backend capabilities` exposes an operation-level `supported_operations` map for the implemented
   command surface
 - unsupported backend-specific operations should fail with

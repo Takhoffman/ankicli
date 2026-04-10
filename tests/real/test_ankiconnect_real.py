@@ -484,18 +484,16 @@ def test_card_unsuspend_dry_run_live_ankiconnect(runner) -> None:
 
 
 @pytest.mark.backend_ankiconnect_real
-def test_media_check_is_structured_unsupported_live_ankiconnect(runner) -> None:
+def test_media_check_live_ankiconnect(runner) -> None:
     _require_live_ankiconnect(runner)
 
     result = runner.invoke(args=["--json", "--backend", "ankiconnect", "media", "check"])
 
-    assert result.exit_code == 14
+    assert result.exit_code == 0
     response = json.loads(result.stdout)
-    assert response["error"]["code"] == "BACKEND_OPERATION_UNSUPPORTED"
-    assert response["error"]["details"] == {
-        "backend": "ankiconnect",
-        "operation": "media.check",
-    }
+    assert response["ok"] is True
+    assert "media_dir" in response["data"]
+    assert "file_count" in response["data"]
 
 
 @pytest.mark.backend_ankiconnect_real
@@ -528,6 +526,28 @@ def test_media_attach_dry_run_live_ankiconnect(runner, tmp_path) -> None:
 
 
 @pytest.mark.backend_ankiconnect_real
+def test_media_resolve_path_live_ankiconnect(runner) -> None:
+    _require_live_ankiconnect(runner)
+
+    list_result = runner.invoke(args=["--json", "--backend", "ankiconnect", "media", "list"])
+    assert list_result.exit_code == 0
+    list_payload = json.loads(list_result.stdout)
+    if not list_payload["data"]["items"]:
+        pytest.skip("No media files available to run media resolve-path check")
+    media_name = list_payload["data"]["items"][0]["name"]
+
+    result = runner.invoke(
+        args=["--json", "--backend", "ankiconnect", "media", "resolve-path", "--name", media_name],
+    )
+
+    assert result.exit_code == 0
+    response = json.loads(result.stdout)
+    assert response["ok"] is True
+    assert response["data"]["name"] == media_name
+    assert "path" in response["data"]
+
+
+@pytest.mark.backend_ankiconnect_real
 def test_deck_delete_dry_run_live_ankiconnect(runner) -> None:
     _require_live_ankiconnect(runner)
     deck_name = _require_env(
@@ -554,3 +574,100 @@ def test_deck_delete_dry_run_live_ankiconnect(runner) -> None:
     assert response["data"]["name"] == deck_name
     assert response["data"]["action"] == "delete"
     assert response["data"]["dry_run"] is True
+
+
+@pytest.mark.backend_ankiconnect_real
+def test_deck_rename_dry_run_live_ankiconnect(runner) -> None:
+    _require_live_ankiconnect(runner)
+    deck_name = _require_env(
+        "ANKICLI_REAL_DECK",
+        "set ANKICLI_REAL_DECK to run live AnkiConnect deck rename checks",
+    )
+
+    result = runner.invoke(
+        args=[
+            "--json",
+            "--backend",
+            "ankiconnect",
+            "deck",
+            "rename",
+            "--name",
+            deck_name,
+            "--to",
+            f"{deck_name} Temp",
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0
+    response = json.loads(result.stdout)
+    assert response["ok"] is True
+    assert response["data"]["name"] == deck_name
+    assert response["data"]["action"] == "rename"
+    assert response["data"]["dry_run"] is True
+
+
+@pytest.mark.backend_ankiconnect_real
+def test_note_delete_dry_run_live_ankiconnect(runner) -> None:
+    _require_live_ankiconnect(runner)
+
+    search_result = runner.invoke(
+        args=["--json", "--backend", "ankiconnect", "search", "notes", "--query", "", "--limit", "1"],
+    )
+    assert search_result.exit_code == 0
+    search_payload = json.loads(search_result.stdout)
+    if not search_payload["data"]["items"]:
+        pytest.skip("No notes available to run note delete check")
+    note_id = search_payload["data"]["items"][0]["id"]
+
+    result = runner.invoke(
+        args=[
+            "--json",
+            "--backend",
+            "ankiconnect",
+            "note",
+            "delete",
+            "--id",
+            str(note_id),
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0
+    response = json.loads(result.stdout)
+    assert response["ok"] is True
+    assert response["data"]["id"] == note_id
+    assert response["data"]["dry_run"] is True
+
+
+@pytest.mark.backend_ankiconnect_real
+def test_tag_rename_dry_run_live_ankiconnect(runner) -> None:
+    _require_live_ankiconnect(runner)
+
+    list_result = runner.invoke(args=["--json", "--backend", "ankiconnect", "tag", "list"])
+    assert list_result.exit_code == 0
+    list_payload = json.loads(list_result.stdout)
+    if not list_payload["data"]["items"]:
+        pytest.skip("No tags available to run tag rename check")
+    tag_name = list_payload["data"]["items"][0]
+
+    result = runner.invoke(
+        args=[
+            "--json",
+            "--backend",
+            "ankiconnect",
+            "tag",
+            "rename",
+            "--name",
+            tag_name,
+            "--to",
+            f"{tag_name}-tmp",
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0
+    response = json.loads(result.stdout)
+    assert response["ok"] is True
+    assert response["data"]["name"] == tag_name
+    assert response["data"]["action"] == "rename"

@@ -68,8 +68,10 @@ This file is generated from `ankicli.app.catalog`.
 - `python-anki` `deck.manage` supported: list, get, stats, create, rename, delete, reparent; unsupported: none
 - `ankiconnect` `study.start` supported: study.start.default; unsupported: none
 - `ankiconnect` `search.unified` supported: search.notes, search.cards; unsupported: none
-- `ankiconnect` `note.manage` supported: get, fields, add, update, add_tags, remove_tags, move_deck; unsupported: delete
-- `ankiconnect` `deck.manage` supported: list, get, stats; unsupported: create, rename, delete, reparent
+- `ankiconnect` `note.manage` supported: get, fields, add, update, delete, add_tags, remove_tags, move_deck; unsupported: none
+- `ankiconnect` `deck.manage` supported: list, get, stats, create, rename, delete, reparent; unsupported: none
+- `ankiconnect` media operations supported: list, check, attach, resolve-path; unsupported: orphaned
+- `ankiconnect` still does not support auth, sync, or backup flows; use `python-anki` for those
 
 ## Deck Stats Contract
 

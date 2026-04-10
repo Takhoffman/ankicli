@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from ankicli.app.errors import BackendOperationUnsupportedError, NoteNotFoundError
+from ankicli.app.errors import (
+    BackendOperationUnsupportedError,
+    NoteNotFoundError,
+    ValidationError,
+)
 from ankicli.backends.ankiconnect import AnkiConnectBackend
 from tests.proof import proves
 
@@ -63,12 +67,19 @@ def test_backend_capabilities_reports_available_when_version_responds(
     assert capabilities.backend == "ankiconnect"
     assert capabilities.available is True
     assert capabilities.supports_live_desktop is True
-    assert capabilities.supported_operations["note.delete"] is False
+    assert capabilities.supported_operations["note.delete"] is True
     assert capabilities.supported_operations["note.add"] is True
     assert capabilities.supported_operations["deck.create"] is True
+    assert capabilities.supported_operations["deck.rename"] is True
     assert capabilities.supported_operations["deck.delete"] is True
+    assert capabilities.supported_operations["deck.reparent"] is True
     assert capabilities.supported_operations["media.attach"] is True
-    assert capabilities.supported_operations["media.list"] is False
+    assert capabilities.supported_operations["media.list"] is True
+    assert capabilities.supported_operations["media.check"] is True
+    assert capabilities.supported_operations["media.resolve_path"] is True
+    assert capabilities.supported_operations["tag.rename"] is True
+    assert capabilities.supported_operations["tag.delete"] is True
+    assert capabilities.supported_operations["tag.reparent"] is True
     assert capabilities.supported_operations["auth.status"] is False
     assert capabilities.supported_operations["sync.run"] is False
 
@@ -116,7 +127,8 @@ def test_backend_capabilities_reports_unavailable_on_connection_failure(
     capabilities = AnkiConnectBackend().backend_capabilities()
 
     assert capabilities.available is False
-    assert capabilities.supported_operations["tag.rename"] is False
+    assert capabilities.supported_operations["tag.rename"] is True
+    assert capabilities.supported_operations["sync.run"] is False
 
 
 @pytest.mark.unit
@@ -239,16 +251,69 @@ def test_get_model_templates_parses_ankiconnect_response(monkeypatch: pytest.Mon
 
 
 @pytest.mark.unit
-def test_media_list_still_raises_structured_unsupported_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _install_http_connection(monkeypatch, {"version": {"result": 5, "error": None}})
+def test_media_list_reads_names_from_media_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    media_dir = tmp_path / "collection.media"
+    media_dir.mkdir()
+    (media_dir / "a.txt").write_text("aa")
+    (media_dir / "b.txt").write_text("b")
+
     backend = AnkiConnectBackend()
 
-    with pytest.raises(BackendOperationUnsupportedError) as excinfo:
-        backend.list_media(Path("."))
+    def fake_invoke(action: str, params: dict | None = None):
+        del params
+        if action == "getMediaDirPath":
+            return str(media_dir)
+        if action == "getMediaFilesNames":
+            return ["a.txt", "b.txt"]
+        raise AssertionError(action)
 
-    assert excinfo.value.details == {"backend": "ankiconnect", "operation": "media.list"}
+    monkeypatch.setattr(backend, "_invoke", fake_invoke)
+
+    result = backend.list_media(Path("."))
+
+    assert result == [
+        {"name": "a.txt", "path": str((media_dir / "a.txt").resolve()), "size": 2},
+        {"name": "b.txt", "path": str((media_dir / "b.txt").resolve()), "size": 1},
+    ]
+
+
+@pytest.mark.unit
+def test_media_check_computes_reference_counts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    media_dir = tmp_path / "collection.media"
+    media_dir.mkdir()
+    (media_dir / "used.png").write_text("u")
+    (media_dir / "orphan.txt").write_text("o")
+
+    backend = AnkiConnectBackend()
+
+    def fake_invoke(action: str, params: dict | None = None):
+        if action == "getMediaDirPath":
+            return str(media_dir)
+        if action == "getMediaFilesNames":
+            return ["used.png", "orphan.txt"]
+        if action == "findNotes":
+            return [101]
+        if action == "notesInfo":
+            return [
+                {
+                    "noteId": 101,
+                    "fields": {
+                        "Front": {"value": '<img src="used.png">', "order": 0},
+                        "Back": {"value": "[sound:missing.mp3]", "order": 1},
+                    },
+                },
+            ]
+        raise AssertionError((action, params))
+
+    monkeypatch.setattr(backend, "_invoke", fake_invoke)
+
+    result = backend.check_media(Path("."))
+
+    assert result["media_dir"] == str(media_dir.resolve())
+    assert result["file_count"] == 2
+    assert result["referenced_count"] == 2
+    assert result["orphaned_count"] == 1
+    assert result["missing_count"] == 1
 
 
 @pytest.mark.unit
@@ -341,43 +406,120 @@ def test_create_deck_dry_run_validates_name_without_write(
 
 @pytest.mark.unit
 def test_delete_deck_uses_ankiconnect_delete_decks(monkeypatch: pytest.MonkeyPatch) -> None:
-    _install_http_connection(
-        monkeypatch,
-        {
-            "deckNamesAndIds": {"result": {"Default": 1, "Japanese": 99}, "error": None},
-            "deleteDecks": {"result": None, "error": None},
-        },
-    )
+    backend = AnkiConnectBackend()
+    calls: list[tuple[str, dict | None]] = []
 
-    result = AnkiConnectBackend().delete_deck(Path("."), name="Japanese", dry_run=False)
+    def fake_invoke(action: str, params: dict | None = None):
+        calls.append((action, params))
+        if action == "deckNamesAndIds":
+            return {"Japanese": 99}
+        if action == "findCards":
+            return []
+        if action == "deleteDecks":
+            return None
+        raise AssertionError((action, params))
 
-    assert result == {
-        "id": 99,
-        "name": "Japanese",
-        "action": "delete",
-        "dry_run": False,
-    }
+    monkeypatch.setattr(backend, "_invoke", fake_invoke)
+
+    result = backend.delete_deck(Path("."), name="Japanese", dry_run=False)
+
+    assert result["id"] == 99
+    assert result["card_count"] == 0
+    assert ("deleteDecks", {"decks": ["Japanese"], "cardsToo": True}) in calls
 
 
 @pytest.mark.unit
 def test_delete_deck_dry_run_validates_name_without_write(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _install_http_connection(
-        monkeypatch,
-        {
-            "deckNamesAndIds": {"result": {"Default": 1, "Japanese": 99}, "error": None},
-        },
-    )
+    backend = AnkiConnectBackend()
 
-    result = AnkiConnectBackend().delete_deck(Path("."), name="Japanese", dry_run=True)
+    def fake_invoke(action: str, params: dict | None = None):
+        del params
+        if action == "deckNamesAndIds":
+            return {"Japanese": 99}
+        if action == "findCards":
+            return [201]
+        if action == "getDecks":
+            return {"Japanese": [201]}
+        raise AssertionError(action)
 
-    assert result == {
-        "id": 99,
-        "name": "Japanese",
-        "action": "delete",
-        "dry_run": True,
-    }
+    monkeypatch.setattr(backend, "_invoke", fake_invoke)
+
+    result = backend.delete_deck(Path("."), name="Japanese", dry_run=True)
+
+    assert result["id"] == 99
+    assert result["card_count"] == 1
+    assert result["dry_run"] is True
+
+
+@pytest.mark.unit
+def test_delete_deck_rejects_non_empty_live_delete(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = AnkiConnectBackend()
+
+    def fake_invoke(action: str, params: dict | None = None):
+        del params
+        if action == "deckNamesAndIds":
+            return {"Japanese": 99}
+        if action == "findCards":
+            return [201]
+        if action == "getDecks":
+            return {"Japanese": [201]}
+        raise AssertionError(action)
+
+    monkeypatch.setattr(backend, "_invoke", fake_invoke)
+
+    with pytest.raises(ValidationError):
+        backend.delete_deck(Path("."), name="Japanese", dry_run=False)
+
+
+@pytest.mark.unit
+def test_rename_deck_moves_subtree_and_reports_descendants(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = AnkiConnectBackend()
+    calls: list[tuple[str, dict | None]] = []
+
+    def fake_invoke(action: str, params: dict | None = None):
+        calls.append((action, params))
+        if action == "deckNamesAndIds":
+            return {"Japanese": 99, "Japanese::Anime": 100}
+        if action == "findCards":
+            return [201, 202]
+        if action == "getDecks":
+            return {"Japanese": [201], "Japanese::Anime": [202]}
+        if action in {"createDeck", "changeDeck", "deleteDecks"}:
+            return None
+        raise AssertionError((action, params))
+
+    monkeypatch.setattr(backend, "_invoke", fake_invoke)
+
+    result = backend.rename_deck(Path("."), name="Japanese", new_name="Immersion", dry_run=False)
+
+    assert result["descendant_count"] == 1
+    assert result["card_count"] == 2
+    assert ("createDeck", {"deck": "Immersion"}) in calls
+    assert ("createDeck", {"deck": "Immersion::Anime"}) in calls
+    assert ("changeDeck", {"cards": [201], "deck": "Immersion"}) in calls
+    assert ("changeDeck", {"cards": [202], "deck": "Immersion::Anime"}) in calls
+
+
+@pytest.mark.unit
+def test_reparent_deck_computes_target_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = AnkiConnectBackend()
+
+    def fake_invoke(action: str, params: dict | None = None):
+        del params
+        if action == "deckNamesAndIds":
+            return {"Japanese": 99, "Study": 1}
+        if action == "findCards":
+            return []
+        raise AssertionError(action)
+
+    monkeypatch.setattr(backend, "_invoke", fake_invoke)
+
+    result = backend.reparent_deck(Path("."), name="Japanese", new_parent="Study", dry_run=True)
+
+    assert result["new_name"] == "Study::Japanese"
+    assert result["new_parent"] == "Study"
 
 
 @pytest.mark.unit
@@ -438,14 +580,106 @@ def test_attach_media_dry_run_skips_store_media_write(
 
 
 @pytest.mark.unit
-def test_delete_note_raises_backend_operation_unsupported() -> None:
-    with pytest.raises(BackendOperationUnsupportedError) as excinfo:
-        AnkiConnectBackend().delete_note(Path("."), note_id=101, dry_run=True)
+def test_delete_note_uses_delete_notes(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = AnkiConnectBackend()
+    calls: list[tuple[str, dict | None]] = []
 
-    assert excinfo.value.details == {
-        "backend": "ankiconnect",
-        "operation": "note.delete",
-    }
+    def fake_invoke(action: str, params: dict | None = None):
+        calls.append((action, params))
+        if action == "notesInfo":
+            return [{"noteId": 101, "modelName": "Basic", "fields": {}, "tags": []}]
+        if action == "deleteNotes":
+            return None
+        raise AssertionError((action, params))
+
+    monkeypatch.setattr(backend, "_invoke", fake_invoke)
+
+    result = backend.delete_note(Path("."), note_id=101, dry_run=False)
+
+    assert result == {"id": 101, "deleted": True, "dry_run": False}
+    assert ("deleteNotes", {"notes": [101]}) in calls
+
+
+@pytest.mark.unit
+def test_tag_rename_uses_replace_tags_in_all_notes(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = AnkiConnectBackend()
+    calls: list[tuple[str, dict | None]] = []
+
+    def fake_invoke(action: str, params: dict | None = None):
+        calls.append((action, params))
+        if action == "getTags":
+            return ["japanese", "japanese::anime"]
+        if action == "findNotes":
+            return [101]
+        if action == "notesInfo":
+            return [{"noteId": 101, "tags": ["japanese", "japanese::anime"], "fields": {}}]
+        if action == "replaceTagsInAllNotes":
+            return None
+        raise AssertionError((action, params))
+
+    monkeypatch.setattr(backend, "_invoke", fake_invoke)
+
+    result = backend.rename_tag(Path("."), name="japanese", new_name="immersion", dry_run=False)
+
+    assert result["affected_tag_count"] == 2
+    assert result["affected_note_count"] == 1
+    assert ("replaceTagsInAllNotes", {"tag_to_replace": "japanese", "replace_with_tag": "immersion"}) in calls
+    assert (
+        "replaceTagsInAllNotes",
+        {"tag_to_replace": "japanese::anime", "replace_with_tag": "immersion::anime"},
+    ) in calls
+
+
+@pytest.mark.unit
+def test_delete_tags_uses_remove_tags(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = AnkiConnectBackend()
+    calls: list[tuple[str, dict | None]] = []
+
+    def fake_invoke(action: str, params: dict | None = None):
+        calls.append((action, params))
+        if action == "getTags":
+            return ["review", "audio"]
+        if action == "findNotes":
+            return [101, 102]
+        if action == "notesInfo":
+            return [
+                {"noteId": 101, "tags": ["review"], "fields": {}},
+                {"noteId": 102, "tags": ["audio"], "fields": {}},
+            ]
+        if action == "removeTags":
+            return None
+        raise AssertionError((action, params))
+
+    monkeypatch.setattr(backend, "_invoke", fake_invoke)
+
+    result = backend.delete_tags(Path("."), tags=["review"], dry_run=False)
+
+    assert result["affected_note_count"] == 1
+    assert ("removeTags", {"notes": [101], "tags": "review"}) in calls
+
+
+@pytest.mark.unit
+def test_reparent_tags_computes_new_hierarchy(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = AnkiConnectBackend()
+
+    def fake_invoke(action: str, params: dict | None = None):
+        if action == "getTags":
+            return ["jlpt::n5", "study"]
+        if action == "findNotes":
+            return [101]
+        if action == "notesInfo":
+            return [{"noteId": 101, "tags": ["jlpt::n5"], "fields": {}}]
+        if action == "replaceTagsInAllNotes":
+            return None
+        raise AssertionError((action, params))
+
+    monkeypatch.setattr(backend, "_invoke", fake_invoke)
+
+    result = backend.reparent_tags(Path("."), tags=["jlpt::n5"], new_parent="study", dry_run=True)
+
+    assert result["tags"] == ["jlpt::n5"]
+    assert result["new_parent"] == "study"
+    assert result["affected_note_count"] == 1
 
 
 @pytest.mark.unit

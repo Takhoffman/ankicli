@@ -6,6 +6,7 @@ import base64
 import http.client
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -24,6 +25,7 @@ from ankicli.app.errors import (
     MediaNotFoundError,
     ModelNotFoundError,
     NoteNotFoundError,
+    TagNotFoundError,
     ValidationError,
 )
 from ankicli.app.models import BackendCapabilities
@@ -33,6 +35,10 @@ from ankicli.backends.base import BaseBackend
 class AnkiConnectBackend(BaseBackend):
     name = "ankiconnect"
     default_api_version = 6
+    _MEDIA_REFERENCE_PATTERNS = (
+        re.compile(r"\[sound:([^\]\r\n]+)\]"),
+        re.compile(r"""<img\b[^>]*\bsrc=["']([^"']+)["']""", re.IGNORECASE),
+    )
 
     def __init__(self, *, url: str | None = None, version: int | None = None) -> None:
         self.url = url or os.environ.get("ANKICONNECT_URL", "http://127.0.0.1:8765")
@@ -73,8 +79,9 @@ class AnkiConnectBackend(BaseBackend):
 
         supported_operations = self.supported_operations()
         notes = [f"AnkiConnect API version {api_version} at {self.url}"]
-        notes.append("Initial AnkiConnect slice excludes note delete.")
-        notes.append("Collection-wide tag lifecycle commands are not implemented yet.")
+        notes.append("AnkiConnect supports live note, deck, tag, and media mutation flows.")
+        notes.append("AnkiConnect does not expose auth, sync, backup, or orphaned-media APIs.")
+        notes.append("Deck and tag hierarchy actions are synthesized from name-based desktop state.")
         return BackendCapabilities(
             backend=self.name,
             available=True,
@@ -243,6 +250,262 @@ class AnkiConnectBackend(BaseBackend):
     def _deck_name_to_id(self) -> dict[str, int]:
         return {item["name"]: int(item["id"]) for item in self._deck_items()}
 
+    def _media_dir(self) -> Path:
+        return Path(str(self._invoke("getMediaDirPath"))).expanduser().resolve()
+
+    def _normalize_media_item(self, media_dir: Path, media_name: str) -> dict:
+        candidate = (media_dir / media_name).resolve()
+        try:
+            candidate.relative_to(media_dir)
+        except ValueError as exc:
+            raise ValidationError(
+                f'Invalid media name "{media_name}"',
+                details={"name": media_name},
+            ) from exc
+        size = candidate.stat().st_size if candidate.exists() and candidate.is_file() else None
+        return {
+            "name": media_name,
+            "path": str(candidate),
+            "size": size,
+        }
+
+    def _resolve_media_candidate(self, media_dir: Path, name: str) -> Path:
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise ValidationError("--name must not be empty")
+        candidate = (media_dir / normalized_name).resolve()
+        try:
+            candidate.relative_to(media_dir)
+        except ValueError as exc:
+            raise ValidationError(
+                f'Invalid media name "{name}"',
+                details={"name": name},
+            ) from exc
+        if not candidate.exists() or not candidate.is_file():
+            raise MediaNotFoundError(
+                f'Media file "{name}" was not found',
+                details={"name": name, "media_dir": str(media_dir)},
+            )
+        return candidate
+
+    def _note_infos(self, note_ids: list[int]) -> list[dict]:
+        if not note_ids:
+            return []
+        return list(self._invoke("notesInfo", {"notes": [int(note_id) for note_id in note_ids]}))
+
+    def _all_note_infos(self) -> list[dict]:
+        note_ids = [int(note_id) for note_id in self._invoke("findNotes", {"query": ""})]
+        return self._note_infos(note_ids)
+
+    def _all_card_ids(self) -> list[int]:
+        return [int(card_id) for card_id in self._invoke("findCards", {"query": ""})]
+
+    def _cards_by_deck(self) -> dict[str, list[int]]:
+        card_ids = self._all_card_ids()
+        if not card_ids:
+            return {}
+        deck_map = self._invoke("getDecks", {"cards": card_ids})
+        return {
+            str(deck_name): [int(card_id) for card_id in ids]
+            for deck_name, ids in deck_map.items()
+        }
+
+    def _deck_subtree(self, source_name: str) -> list[dict]:
+        decks = self._deck_items()
+        matching = [
+            deck
+            for deck in decks
+            if deck["name"] == source_name or deck["name"].startswith(f"{source_name}::")
+        ]
+        if not matching:
+            raise DeckNotFoundError(
+                f'Deck "{source_name}" was not found',
+                details={"deck_name": source_name},
+            )
+        return sorted(matching, key=lambda item: item["name"])
+
+    def _target_deck_name(self, source_name: str, current_name: str, new_name: str) -> str:
+        suffix = current_name[len(source_name) :]
+        return f"{new_name}{suffix}"
+
+    def _rename_deck_tree(
+        self,
+        *,
+        name: str,
+        new_name: str,
+        dry_run: bool,
+        action: str,
+        new_parent: str | None = None,
+    ) -> dict:
+        subtree = self._deck_subtree(name)
+        subtree_names = {deck["name"] for deck in subtree}
+        deck_id = next(int(deck["id"]) for deck in subtree if deck["name"] == name)
+        mapping = {
+            old_name: self._target_deck_name(name, old_name, new_name)
+            for old_name in subtree_names
+        }
+        existing_names = set(self._deck_name_to_id())
+        conflicts = sorted(
+            target_name
+            for target_name in mapping.values()
+            if target_name in existing_names and target_name not in subtree_names
+        )
+        if conflicts:
+            raise ValidationError(
+                f'Deck target "{conflicts[0]}" already exists',
+                details={"deck_name": name, "new_name": new_name, "conflict": conflicts[0]},
+            )
+
+        descendant_count = len(subtree_names) - 1
+        cards_by_deck = self._cards_by_deck()
+        affected_card_count = sum(len(cards_by_deck.get(deck_name, [])) for deck_name in subtree_names)
+
+        if not dry_run:
+            for target_name in sorted(set(mapping.values()), key=lambda item: (item.count("::"), item)):
+                if target_name not in existing_names:
+                    self._invoke("createDeck", {"deck": target_name})
+            for old_name, target_name in sorted(mapping.items(), key=lambda item: item[0]):
+                card_ids = cards_by_deck.get(old_name, [])
+                if card_ids:
+                    self._invoke("changeDeck", {"cards": card_ids, "deck": target_name})
+            for old_name in sorted(subtree_names, key=lambda item: (-item.count("::"), item)):
+                self._invoke("deleteDecks", {"decks": [old_name], "cardsToo": True})
+
+        payload = {
+            "id": deck_id,
+            "name": name,
+            "new_name": new_name,
+            "action": action,
+            "dry_run": dry_run,
+            "descendant_count": descendant_count,
+            "card_count": affected_card_count,
+        }
+        if new_parent is not None:
+            payload["new_parent"] = new_parent
+        return payload
+
+    def _extract_media_references(self, field_value: Any) -> set[str]:
+        references: set[str] = set()
+        text = str(field_value or "")
+        for pattern in self._MEDIA_REFERENCE_PATTERNS:
+            for match in pattern.findall(text):
+                normalized = str(match).strip()
+                if normalized:
+                    references.add(normalized)
+        return references
+
+    def _referenced_media_names(self) -> set[str]:
+        references: set[str] = set()
+        for note in self._all_note_infos():
+            for field in note.get("fields", {}).values():
+                references.update(self._extract_media_references(field.get("value", "")))
+        return references
+
+    def _available_tags_map(self) -> dict[str, str]:
+        return {tag.lower(): tag for tag in self.list_tags(Path("."))}
+
+    def _require_existing_tags(self, tags: list[str]) -> list[str]:
+        available = self._available_tags_map()
+        normalized: list[str] = []
+        for tag in tags:
+            actual = available.get(tag.lower())
+            if actual is None:
+                raise TagNotFoundError(f'Tag "{tag}" was not found', details={"tag": tag})
+            normalized.append(actual)
+        return normalized
+
+    def _ensure_non_overlapping_roots(self, names: list[str], *, detail_key: str) -> None:
+        sorted_names = sorted(set(names))
+        for index, left in enumerate(sorted_names):
+            for right in sorted_names[index + 1 :]:
+                if right == left or right.startswith(f"{left}::"):
+                    raise ValidationError(
+                        "Overlapping hierarchical targets are not supported",
+                        details={detail_key: sorted_names},
+                    )
+
+    def _tag_tree(self, root: str) -> list[str]:
+        available = self.list_tags(Path("."))
+        matching = [tag for tag in available if tag == root or tag.startswith(f"{root}::")]
+        if not matching:
+            raise TagNotFoundError(f'Tag "{root}" was not found', details={"tag": root})
+        return sorted(matching)
+
+    def _rename_tag_tree(
+        self,
+        *,
+        roots: list[str],
+        rename_root: str | None = None,
+        new_parent: str | None = None,
+        dry_run: bool,
+        action: str,
+    ) -> dict:
+        canonical_roots = self._require_existing_tags(roots)
+        self._ensure_non_overlapping_roots(canonical_roots, detail_key="tags")
+        available = self.list_tags(Path("."))
+        source_tags: set[str] = set()
+        mapping: dict[str, str] = {}
+
+        for root in canonical_roots:
+            subtree = self._tag_tree(root)
+            source_tags.update(subtree)
+            if rename_root is not None:
+                for tag in subtree:
+                    suffix = tag[len(root) :]
+                    mapping[tag] = f"{rename_root}{suffix}"
+            else:
+                for tag in subtree:
+                    leaf = tag.split("::")[-1]
+                    suffix = tag[len(root) :].split("::")[1:] if tag != root else []
+                    base = f"{new_parent}::{leaf}" if new_parent else leaf
+                    mapping[tag] = "::".join([base, *suffix]) if suffix else base
+
+        for source, target in mapping.items():
+            if source == target:
+                raise ValidationError(
+                    "Tag reparent target must change the tag name",
+                    details={"tag": source, "target": target},
+                )
+
+        conflicts = sorted(
+            target for target in mapping.values() if target in available and target not in source_tags
+        )
+        if conflicts:
+            raise ValidationError(
+                f'Tag target "{conflicts[0]}" already exists',
+                details={"conflict": conflicts[0], "tags": canonical_roots},
+            )
+
+        notes = self._all_note_infos()
+        affected_note_ids = sorted(
+            {
+                int(note.get("noteId"))
+                for note in notes
+                if any(tag in mapping for tag in note.get("tags", []))
+            },
+        )
+
+        if not dry_run:
+            for source, target in sorted(mapping.items()):
+                self._invoke(
+                    "replaceTagsInAllNotes",
+                    {"tag_to_replace": source, "replace_with_tag": target},
+                )
+
+        payload = {
+            "action": action,
+            "dry_run": dry_run,
+            "affected_tag_count": len(mapping),
+            "affected_note_count": len(affected_note_ids),
+        }
+        if rename_root is not None and len(canonical_roots) == 1:
+            payload["name"] = canonical_roots[0]
+            payload["new_name"] = rename_root
+        else:
+            payload["tags"] = canonical_roots
+            payload["new_parent"] = new_parent or ""
+        return payload
+
     def _model_field_names(self, name: str) -> list[str]:
         return [str(field) for field in self._invoke("modelFieldNames", {"modelName": name})]
 
@@ -301,28 +564,38 @@ class AnkiConnectBackend(BaseBackend):
         new_name: str,
         dry_run: bool,
     ) -> dict:
-        del collection_path, name, new_name, dry_run
-        self._raise_unsupported("deck.rename")
+        del collection_path
+        return self._rename_deck_tree(
+            name=name,
+            new_name=new_name,
+            dry_run=dry_run,
+            action="rename",
+        )
 
     def delete_deck(self, collection_path: Path, *, name: str, dry_run: bool) -> dict:
         del collection_path
-        deck_id = self._deck_name_to_id().get(name)
-        if deck_id is None:
-            raise DeckNotFoundError(f'Deck "{name}" was not found', details={"deck_name": name})
+        subtree = self._deck_subtree(name)
+        deck_id = next(int(deck["id"]) for deck in subtree if deck["name"] == name)
+        subtree_names = {deck["name"] for deck in subtree}
+        cards_by_deck = self._cards_by_deck()
+        card_count = sum(len(cards_by_deck.get(deck_name, [])) for deck_name in subtree_names)
         if not dry_run:
-            self._invoke(
-                "deleteDecks",
-                {
-                    "decks": [name],
-                    "cardsToo": False,
-                },
-            )
-        return {
+            if card_count:
+                raise ValidationError(
+                    "AnkiConnect can only delete empty decks without deleting cards",
+                    details={"deck_name": name, "card_count": card_count},
+                )
+            for deck_name in sorted(subtree_names, key=lambda item: (-item.count("::"), item)):
+                self._invoke("deleteDecks", {"decks": [deck_name], "cardsToo": True})
+        payload = {
             "id": int(deck_id),
             "name": name,
             "action": "delete",
             "dry_run": dry_run,
+            "descendant_count": len(subtree_names) - 1,
+            "card_count": card_count,
         }
+        return payload
 
     def reparent_deck(
         self,
@@ -332,8 +605,24 @@ class AnkiConnectBackend(BaseBackend):
         new_parent: str,
         dry_run: bool,
     ) -> dict:
-        del collection_path, name, new_parent, dry_run
-        self._raise_unsupported("deck.reparent")
+        del collection_path
+        if new_parent:
+            self.get_deck(Path("."), name=new_parent)
+            if new_parent == name or new_parent.startswith(f"{name}::"):
+                raise ValidationError(
+                    "Deck reparent target must not be the source deck or its descendant",
+                    details={"deck_name": name, "new_parent": new_parent},
+                )
+            target_name = f"{new_parent}::{name.split('::')[-1]}"
+        else:
+            target_name = name.split("::")[-1]
+        return self._rename_deck_tree(
+            name=name,
+            new_name=target_name,
+            dry_run=dry_run,
+            action="reparent",
+            new_parent=new_parent,
+        )
 
     def list_models(self, collection_path: Path) -> list[dict]:
         del collection_path
@@ -377,11 +666,30 @@ class AnkiConnectBackend(BaseBackend):
 
     def list_media(self, collection_path: Path) -> list[dict]:
         del collection_path
-        self._raise_unsupported("media.list")
+        media_dir = self._media_dir()
+        names = [str(name) for name in self._invoke("getMediaFilesNames")]
+        return [self._normalize_media_item(media_dir, name) for name in names]
 
     def check_media(self, collection_path: Path) -> dict:
         del collection_path
-        self._raise_unsupported("media.check")
+        media_dir = self._media_dir()
+        names = [str(name) for name in self._invoke("getMediaFilesNames")]
+        referenced = self._referenced_media_names()
+        file_names = set(names)
+        orphaned = sorted(file_names - referenced)
+        missing = sorted(referenced - file_names)
+        warnings = []
+        if orphaned or missing:
+            warnings.append("AnkiConnect media check is name-based and uses note field references.")
+        return {
+            "media_dir": str(media_dir),
+            "exists": media_dir.exists(),
+            "file_count": len(names),
+            "referenced_count": len(referenced),
+            "orphaned_count": len(orphaned),
+            "missing_count": len(missing),
+            "warnings": warnings,
+        }
 
     def list_orphaned_media(self, collection_path: Path) -> list[dict]:
         del collection_path
@@ -428,8 +736,10 @@ class AnkiConnectBackend(BaseBackend):
         }
 
     def resolve_media_path(self, collection_path: Path, *, name: str) -> dict:
-        del collection_path, name
-        self._raise_unsupported("media.resolve_path")
+        del collection_path
+        media_dir = self._media_dir()
+        candidate = self._resolve_media_candidate(media_dir, name)
+        return self._normalize_media_item(media_dir, candidate.relative_to(media_dir).as_posix())
 
     def list_tags(self, collection_path: Path) -> list[str]:
         del collection_path
@@ -443,8 +753,13 @@ class AnkiConnectBackend(BaseBackend):
         new_name: str,
         dry_run: bool,
     ) -> dict:
-        del collection_path, name, new_name, dry_run
-        self._raise_unsupported("tag.rename")
+        del collection_path
+        return self._rename_tag_tree(
+            roots=[name],
+            rename_root=new_name,
+            dry_run=dry_run,
+            action="rename",
+        )
 
     def delete_tags(
         self,
@@ -453,8 +768,24 @@ class AnkiConnectBackend(BaseBackend):
         tags: list[str],
         dry_run: bool,
     ) -> dict:
-        del collection_path, tags, dry_run
-        self._raise_unsupported("tag.delete")
+        del collection_path
+        canonical_tags = self._require_existing_tags(tags)
+        notes = self._all_note_infos()
+        affected_note_ids = sorted(
+            {
+                int(note.get("noteId"))
+                for note in notes
+                if any(tag in canonical_tags for tag in note.get("tags", []))
+            },
+        )
+        if not dry_run and affected_note_ids:
+            self._invoke("removeTags", {"notes": affected_note_ids, "tags": " ".join(canonical_tags)})
+        return {
+            "tags": list(canonical_tags),
+            "action": "delete",
+            "dry_run": dry_run,
+            "affected_note_count": len(affected_note_ids),
+        }
 
     def reparent_tags(
         self,
@@ -464,8 +795,13 @@ class AnkiConnectBackend(BaseBackend):
         new_parent: str,
         dry_run: bool,
     ) -> dict:
-        del collection_path, tags, new_parent, dry_run
-        self._raise_unsupported("tag.reparent")
+        del collection_path
+        return self._rename_tag_tree(
+            roots=tags,
+            new_parent=new_parent,
+            dry_run=dry_run,
+            action="reparent",
+        )
 
     def find_notes(
         self,
@@ -619,8 +955,15 @@ class AnkiConnectBackend(BaseBackend):
         note_id: int,
         dry_run: bool,
     ) -> dict:
-        del collection_path, note_id, dry_run
-        self._raise_unsupported("note.delete")
+        del collection_path
+        self.get_note(Path("."), note_id)
+        if not dry_run:
+            self._invoke("deleteNotes", {"notes": [int(note_id)]})
+        return {
+            "id": int(note_id),
+            "deleted": not dry_run,
+            "dry_run": dry_run,
+        }
 
     def move_note_to_deck(
         self,
