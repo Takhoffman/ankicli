@@ -81,7 +81,9 @@ class AnkiConnectBackend(BaseBackend):
         notes = [f"AnkiConnect API version {api_version} at {self.url}"]
         notes.append("AnkiConnect supports live note, deck, tag, and media mutation flows.")
         notes.append("AnkiConnect does not expose auth, sync, backup, or orphaned-media APIs.")
-        notes.append("Deck and tag hierarchy actions are synthesized from name-based desktop state.")
+        notes.append(
+            "Deck and tag hierarchy actions are synthesized from name-based desktop state."
+        )
         return BackendCapabilities(
             backend=self.name,
             available=True,
@@ -358,10 +360,14 @@ class AnkiConnectBackend(BaseBackend):
 
         descendant_count = len(subtree_names) - 1
         cards_by_deck = self._cards_by_deck()
-        affected_card_count = sum(len(cards_by_deck.get(deck_name, [])) for deck_name in subtree_names)
+        affected_card_count = sum(
+            len(cards_by_deck.get(deck_name, [])) for deck_name in subtree_names
+        )
 
         if not dry_run:
-            for target_name in sorted(set(mapping.values()), key=lambda item: (item.count("::"), item)):
+            for target_name in sorted(
+                set(mapping.values()), key=lambda item: (item.count("::"), item)
+            ):
                 if target_name not in existing_names:
                     self._invoke("createDeck", {"deck": target_name})
             for old_name, target_name in sorted(mapping.items(), key=lambda item: item[0]):
@@ -468,7 +474,9 @@ class AnkiConnectBackend(BaseBackend):
                 )
 
         conflicts = sorted(
-            target for target in mapping.values() if target in available and target not in source_tags
+            target
+            for target in mapping.values()
+            if target in available and target not in source_tags
         )
         if conflicts:
             raise ValidationError(
@@ -779,7 +787,10 @@ class AnkiConnectBackend(BaseBackend):
             },
         )
         if not dry_run and affected_note_ids:
-            self._invoke("removeTags", {"notes": affected_note_ids, "tags": " ".join(canonical_tags)})
+            self._invoke(
+                "removeTags",
+                {"notes": affected_note_ids, "tags": " ".join(canonical_tags)},
+            )
         return {
             "tags": list(canonical_tags),
             "action": "delete",

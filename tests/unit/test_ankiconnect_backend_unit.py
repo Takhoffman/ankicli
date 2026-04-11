@@ -251,7 +251,9 @@ def test_get_model_templates_parses_ankiconnect_response(monkeypatch: pytest.Mon
 
 
 @pytest.mark.unit
-def test_media_list_reads_names_from_media_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_media_list_reads_names_from_media_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     media_dir = tmp_path / "collection.media"
     media_dir.mkdir()
     (media_dir / "a.txt").write_text("aa")
@@ -278,7 +280,9 @@ def test_media_list_reads_names_from_media_dir(monkeypatch: pytest.MonkeyPatch, 
 
 
 @pytest.mark.unit
-def test_media_check_computes_reference_counts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_media_check_computes_reference_counts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     media_dir = tmp_path / "collection.media"
     media_dir.mkdir()
     (media_dir / "used.png").write_text("u")
@@ -623,7 +627,10 @@ def test_tag_rename_uses_replace_tags_in_all_notes(monkeypatch: pytest.MonkeyPat
 
     assert result["affected_tag_count"] == 2
     assert result["affected_note_count"] == 1
-    assert ("replaceTagsInAllNotes", {"tag_to_replace": "japanese", "replace_with_tag": "immersion"}) in calls
+    assert (
+        "replaceTagsInAllNotes",
+        {"tag_to_replace": "japanese", "replace_with_tag": "immersion"},
+    ) in calls
     assert (
         "replaceTagsInAllNotes",
         {"tag_to_replace": "japanese::anime", "replace_with_tag": "immersion::anime"},

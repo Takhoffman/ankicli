@@ -612,7 +612,17 @@ def test_note_delete_dry_run_live_ankiconnect(runner) -> None:
     _require_live_ankiconnect(runner)
 
     search_result = runner.invoke(
-        args=["--json", "--backend", "ankiconnect", "search", "notes", "--query", "", "--limit", "1"],
+        args=[
+            "--json",
+            "--backend",
+            "ankiconnect",
+            "search",
+            "notes",
+            "--query",
+            "",
+            "--limit",
+            "1",
+        ],
     )
     assert search_result.exit_code == 0
     search_payload = json.loads(search_result.stdout)
