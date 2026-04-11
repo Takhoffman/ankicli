@@ -209,18 +209,29 @@ ankicli --json doctor backend</code></pre>
       background 160ms ease,
       box-shadow 160ms ease;
   }
+  .link-card:link,
+  .link-card:visited {
+    color: var(--text);
+  }
   .link-card:hover {
     transform: translateY(-4px);
     border-color: rgba(156, 255, 79, 0.3);
     box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
   }
+  .link-card:focus-visible {
+    outline: 2px solid rgba(156, 255, 79, 0.9);
+    outline-offset: 3px;
+    border-color: rgba(156, 255, 79, 0.4);
+  }
   .link-card h3 {
     font-size: clamp(1.4rem, 2vw, 1.8rem);
     line-height: 1.08;
+    color: var(--text);
   }
   .link-card p {
     margin: 0;
     max-width: 32ch;
+    color: var(--muted);
   }
   .card-kicker {
     color: var(--lime);
