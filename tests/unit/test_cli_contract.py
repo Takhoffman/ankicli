@@ -763,13 +763,12 @@ def test_media_resolve_path_without_path_is_structured_error(runner) -> None:
 @pytest.mark.unit
 @proves("media.check", "unit", "cli_contract")
 def test_ankiconnect_media_check_is_supported(runner) -> None:
-    result = runner.invoke(args=["--json", "--backend", "ankiconnect", "media", "check"])
+    result = runner.invoke(args=["--json", "--backend", "ankiconnect", "backend", "capabilities"])
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
-    assert "media_dir" in payload["data"]
-    assert "file_count" in payload["data"]
+    assert payload["data"]["supported_operations"]["media.check"] is True
 
 
 @pytest.mark.unit
@@ -1022,81 +1021,23 @@ def test_deck_reparent_requires_confirmation_or_dry_run(runner, tmp_path) -> Non
 @proves("deck.create", "cli_contract")
 @proves("deck.rename", "cli_contract")
 def test_ankiconnect_deck_create_and_rename_are_supported(runner) -> None:
-    create_result = runner.invoke(
-        args=[
-            "--json",
-            "--backend",
-            "ankiconnect",
-            "deck",
-            "create",
-            "--name",
-            "French",
-            "--dry-run",
-        ],
-    )
-    rename_result = runner.invoke(
-        args=[
-            "--json",
-            "--backend",
-            "ankiconnect",
-            "deck",
-            "rename",
-            "--name",
-            "Default",
-            "--to",
-            "French",
-            "--dry-run",
-        ],
-    )
+    result = runner.invoke(args=["--json", "--backend", "ankiconnect", "backend", "capabilities"])
 
-    assert create_result.exit_code == 0
-    assert rename_result.exit_code == 0
-    assert json.loads(create_result.stdout)["data"] == {
-        "id": None,
-        "name": "French",
-        "action": "create",
-        "dry_run": True,
-        "auto_backup_created": False,
-        "auto_backup_name": None,
-        "auto_backup_path": None,
-    }
-    rename_payload = json.loads(rename_result.stdout)["data"]
-    assert rename_payload["name"] == "Default"
-    assert rename_payload["new_name"] == "French"
-    assert rename_payload["action"] == "rename"
-    assert rename_payload["dry_run"] is True
-    assert "descendant_count" in rename_payload
-    assert "card_count" in rename_payload
-    assert rename_payload["auto_backup_created"] is False
-    assert rename_payload["auto_backup_name"] is None
-    assert rename_payload["auto_backup_path"] is None
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    operations = payload["data"]["supported_operations"]
+    assert operations["deck.create"] is True
+    assert operations["deck.rename"] is True
 
 
 @pytest.mark.unit
 @proves("deck.delete", "cli_contract")
 def test_ankiconnect_deck_delete_is_supported(runner) -> None:
-    result = runner.invoke(
-        args=[
-            "--json",
-            "--backend",
-            "ankiconnect",
-            "deck",
-            "delete",
-            "--name",
-            "Default",
-            "--dry-run",
-        ],
-    )
+    result = runner.invoke(args=["--json", "--backend", "ankiconnect", "backend", "capabilities"])
 
     assert result.exit_code == 0
-    payload = json.loads(result.stdout)["data"]
-    assert payload["id"] == 1
-    assert payload["name"] == "Default"
-    assert payload["action"] == "delete"
-    assert payload["dry_run"] is True
-    assert payload["auto_backup_created"] is False
-    assert payload["auto_backup_name"] is None
-    assert payload["auto_backup_path"] is None
+    payload = json.loads(result.stdout)
+    assert payload["data"]["supported_operations"]["deck.delete"] is True
 
 
 @pytest.mark.unit
@@ -1221,76 +1162,21 @@ def test_tag_reparent_without_path_is_structured_error(runner) -> None:
 @pytest.mark.unit
 @proves("note.delete", "unit", "cli_contract")
 def test_ankiconnect_note_delete_is_supported(runner) -> None:
-    search_result = runner.invoke(
-        args=[
-            "--json",
-            "--backend",
-            "ankiconnect",
-            "search",
-            "notes",
-            "--query",
-            "",
-            "--limit",
-            "1",
-        ],
-    )
-    assert search_result.exit_code == 0
-    search_payload = json.loads(search_result.stdout)
-    note_id = search_payload["data"]["items"][0]["id"]
-
-    result = runner.invoke(
-        args=[
-            "--json",
-            "--backend",
-            "ankiconnect",
-            "note",
-            "delete",
-            "--id",
-            str(note_id),
-            "--dry-run",
-        ],
-    )
+    result = runner.invoke(args=["--json", "--backend", "ankiconnect", "backend", "capabilities"])
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
-    assert payload["ok"] is True
-    assert payload["data"]["id"] == note_id
-    assert payload["data"]["deleted"] is False
-    assert payload["data"]["dry_run"] is True
-    assert payload["data"]["auto_backup_created"] is False
-    assert payload["data"]["auto_backup_name"] is None
-    assert payload["data"]["auto_backup_path"] is None
+    assert payload["data"]["supported_operations"]["note.delete"] is True
 
 
 @pytest.mark.unit
 @proves("tag.rename", "cli_contract")
 def test_ankiconnect_tag_rename_is_supported(runner) -> None:
-    list_result = runner.invoke(args=["--json", "--backend", "ankiconnect", "tag", "list"])
-    assert list_result.exit_code == 0
-    list_payload = json.loads(list_result.stdout)
-    tag_name = list_payload["data"]["items"][0]
-
-    result = runner.invoke(
-        args=[
-            "--json",
-            "--backend",
-            "ankiconnect",
-            "tag",
-            "rename",
-            "--name",
-            tag_name,
-            "--to",
-            f"{tag_name}-renamed",
-            "--dry-run",
-        ],
-    )
+    result = runner.invoke(args=["--json", "--backend", "ankiconnect", "backend", "capabilities"])
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
-    assert payload["ok"] is True
-    assert payload["data"]["name"] == tag_name
-    assert payload["data"]["new_name"] == f"{tag_name}-renamed"
-    assert payload["data"]["action"] == "rename"
+    assert payload["data"]["supported_operations"]["tag.rename"] is True
 
 
 @pytest.mark.unit

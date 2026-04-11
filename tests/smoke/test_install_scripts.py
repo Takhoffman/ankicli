@@ -167,4 +167,4 @@ def test_powershell_installer_script_is_version_and_path_aware(tmp_path: Path) -
     )
 
     assert result.returncode == 0, result.stderr
-    assert (install_root / "ankicli.exe").exists()
+    assert (install_root / "1.2.3" / "ankicli.exe").exists()

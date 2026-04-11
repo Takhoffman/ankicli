@@ -85,7 +85,7 @@ def test_catalog_derives_backend_operations_and_workflows() -> None:
     workflows = supported_workflows_for_operations(ankiconnect_ops)
 
     assert ankiconnect_ops["note.add"] is True
-    assert ankiconnect_ops["note.delete"] is False
+    assert ankiconnect_ops["note.delete"] is True
     assert workflows["study.start"] is True
     assert workflows["collection.status"] is True
     assert workflows["study.grade.backend"] is False
