@@ -1,4 +1,0 @@
-interface:
-  display_name: "Anki Operations"
-  short_description: "Safe Anki workflows via ankicli and OpenClaw."
-  default_prompt: "Use $anki-operations to inspect, diagnose, and safely update an Anki collection with ankicli or its OpenClaw plugin."

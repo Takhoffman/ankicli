@@ -1,6 +1,6 @@
 ---
 name: ankicli-maintainer
-description: Use when an agent is helping maintain ankicli itself: releasing versions, validating packaging, checking installer and site contracts, and coordinating maintainer-facing repo workflows. Start by clarifying which maintainer task the operator wants. Prefer a guided workflow over assuming release intent.
+description: Use when an agent is helping maintain ankicli itself: routing maintainer tasks, preparing releases, validating packaging and automation, and checking installer, site, and distribution contracts.
 ---
 
 Use this skill when the task is about maintaining `ankicli` as a product and repository, not when using the CLI against an Anki collection.
@@ -17,7 +17,7 @@ Use this skill when the task is about maintaining `ankicli` as a product and rep
 
 Use a short prompt like:
 
-- "What do you want to do with ankicli maintenance right now: prepare a release, validate packaging, inspect release automation, or something else?"
+- "What do you want to do with ankicli maintenance right now: prepare a release, validate release automation, inspect distribution or installers, or something else?"
 
 If the operator already asked for release work, skip the routing question and go straight to the release reference.
 
@@ -31,11 +31,16 @@ Before substantive maintainer work, inspect:
 
 ## Read the right reference
 
-- Read `references/release.md` for release prep, tagged release flow, installers, standalone artifacts, and optional PyPI publishing.
+- Read `references/release-routing.md` when you need the high-level maintainer release modes and validation order.
+- Read `references/release.md` for detailed tagged release flow, GitHub Releases, Pages, installers, and PyPI publishing.
+- Read `references/distribution.md` when the task is specifically about artifact naming, installer contracts, package metadata, or standalone release validation.
 
-## Current scope
+## Supported maintainer workflows
 
-Right now, the only fully detailed maintainer reference is release work.
+- release readiness
+- tagged release execution
+- distribution and installer verification
+- release automation inspection
 
 If the operator asks for a maintainer workflow that is not documented yet:
 
