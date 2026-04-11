@@ -26,20 +26,23 @@ SKILL_BUNDLE = SkillBundleSpec(
 
 
 def _source_skills_root() -> Path:
-    packaged = importlib.resources.files("ankicli").joinpath("skills")
+    packaged = importlib.resources.files("ankicli").joinpath("bundled-skills")
     if packaged.is_dir():
         return Path(str(packaged))
     for parent in Path(__file__).resolve().parents:
-        candidate = parent / "skills"
+        candidate = parent / "bundled-skills"
         if candidate.is_dir():
             return candidate
     raise ValidationError("Bundled ankicli skills are not available")
 
 
-def _bundle_source_dir() -> Path:
-    source = _source_skills_root() / SKILL_BUNDLE.name
+def _bundle_source_dir(target: str) -> Path:
+    source = _source_skills_root() / target / SKILL_BUNDLE.name
     if not source.is_dir():
-        raise ValidationError("Bundled ankicli skill bundle is missing")
+        raise ValidationError(
+            "Bundled ankicli skill bundle is missing",
+            details={"target": target, "bundle": SKILL_BUNDLE.name},
+        )
     return source
 
 
@@ -81,7 +84,7 @@ def skill_list_payload() -> dict:
             {
                 "name": SKILL_BUNDLE.name,
                 "description": SKILL_BUNDLE.description,
-                "source": f"skills/{SKILL_BUNDLE.name}/SKILL.md",
+                "source": "bundled-skills/<target>/ankicli/SKILL.md",
             }
         ],
         "targets": {
@@ -93,8 +96,8 @@ def skill_list_payload() -> dict:
     }
 
 
-def _install_one_bundle(*, root: Path, overwrite: bool) -> dict:
-    source = _bundle_source_dir()
+def _install_one_bundle(*, source_target: str, root: Path, overwrite: bool) -> dict:
+    source = _bundle_source_dir(source_target)
     destination = root / SKILL_BUNDLE.name
     if destination.exists():
         if not overwrite:
@@ -123,6 +126,7 @@ def _install_one_bundle(*, root: Path, overwrite: bool) -> dict:
         "bundle": SKILL_BUNDLE.name,
         "status": "installed",
         "path": str(destination),
+        "source_target": source_target,
         "files": _bundle_files(destination),
     }
 
@@ -136,23 +140,43 @@ def install_skills(
     if path and target == "all":
         raise ValidationError("--target all cannot be combined with --path")
     if path:
-        roots = [{"target": "custom", "root": Path(path).expanduser()}]
+        roots = [
+            {
+                "target": "custom",
+                "root": Path(path).expanduser(),
+                "source_target": target or "codex",
+            }
+        ]
     elif target == "all":
         roots = [
-            {"target": "codex", "root": _agent_home("codex")},
-            {"target": "claude", "root": _agent_home("claude")},
-            {"target": "openclaw", "root": _agent_home("openclaw")},
+            {"target": "codex", "root": _agent_home("codex"), "source_target": "codex"},
+            {"target": "claude", "root": _agent_home("claude"), "source_target": "claude"},
+            {
+                "target": "openclaw",
+                "root": _agent_home("openclaw"),
+                "source_target": "openclaw",
+            },
         ]
     else:
         selected_target = target or "codex"
-        roots = [{"target": selected_target, "root": _agent_home(selected_target)}]
+        roots = [
+            {
+                "target": selected_target,
+                "root": _agent_home(selected_target),
+                "source_target": selected_target,
+            }
+        ]
     installed_targets = []
     for item in roots:
         installed_targets.append(
             {
                 "target": item["target"],
                 "root": str(item["root"]),
-                "bundle": _install_one_bundle(root=item["root"], overwrite=overwrite),
+                "bundle": _install_one_bundle(
+                    source_target=item["source_target"],
+                    root=item["root"],
+                    overwrite=overwrite,
+                ),
             }
         )
     return {

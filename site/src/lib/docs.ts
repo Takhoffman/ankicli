@@ -94,13 +94,13 @@ export const docsPages: Record<string, DocPage> = {
       {
         heading: "What this page ships",
         body: [
-          "The canonical public copy lives under `skills/ankicli/` and is bundled into the ankicli package. That makes it installable through `ankicli skill install` without waiting for the plugin release.",
+          "The shipped public copies live under `bundled-skills/<target>/ankicli/` and are bundled into the ankicli package. That makes them installable through `ankicli skill install` without waiting for the plugin release.",
           "The skill uses progressive disclosure: one `SKILL.md` plus focused files under `references/` for setup, study, authoring, diagnostics, sync, and learning plans.",
         ],
         commands: [
           {
             label: "Public skill bundle",
-            body: `skills/ankicli/SKILL.md\n${umbrellaReferenceMap}`,
+            body: `bundled-skills/codex/ankicli/SKILL.md\nbundled-skills/claude/ankicli/SKILL.md\nbundled-skills/openclaw/ankicli/SKILL.md\n${umbrellaReferenceMap}`,
           },
         ],
         bullets: [

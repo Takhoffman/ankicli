@@ -3,6 +3,10 @@ name: ankicli-release
 description: Teach the agent how to prepare and validate ankicli release and packaging work.
 ---
 
+Prefer `ankicli-maintainer` for new maintainer-facing workflows.
+
+This focused skill remains the narrow release-only variant.
+
 Treat releases as packaging-sensitive changes. Confirm version, build, distribution tests,
 standalone artifacts, installer checksum behavior, and tag-triggered GitHub Release publishing
 before recommending a release.

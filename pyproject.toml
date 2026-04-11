@@ -35,7 +35,7 @@ packages = ["src/ankicli"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "CHANGELOG.md" = "ankicli/CHANGELOG.md"
-"skills" = "ankicli/skills"
+"bundled-skills" = "ankicli/bundled-skills"
 
 [tool.pytest.ini_options]
 addopts = "-ra"
