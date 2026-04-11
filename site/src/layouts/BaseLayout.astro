@@ -100,6 +100,27 @@ const withBase = (path: string) => new URL(path, `https://takhoffman.github.io${
         border-radius: 1.5rem;
         box-shadow: var(--shadow);
       }
+      .surface-link {
+        text-decoration: none;
+        color: var(--text);
+      }
+      .surface-link:link,
+      .surface-link:visited {
+        color: var(--text);
+      }
+      .surface-link:focus-visible {
+        outline: 2px solid rgba(156, 255, 79, 0.9);
+        outline-offset: 3px;
+      }
+      .surface-link h1,
+      .surface-link h2,
+      .surface-link h3,
+      .surface-link h4 {
+        color: var(--text);
+      }
+      .surface-link p {
+        color: var(--muted);
+      }
       code, pre {
         font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, monospace;
       }

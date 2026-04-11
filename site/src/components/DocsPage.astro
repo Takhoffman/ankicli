@@ -53,7 +53,7 @@ const markdown = pageMarkdown(page);
         {section.links && (
           <div class="link-list">
             {section.links.map((link) => (
-              <a class="resource-link" href={link.href} target="_blank" rel="noreferrer">
+              <a class="resource-link surface-link" href={link.href} target="_blank" rel="noreferrer">
                 <span class="resource-link-label">{link.label}</span>
                 {link.helper && <span class="resource-link-helper">{link.helper}</span>}
               </a>
@@ -270,8 +270,6 @@ const markdown = pageMarkdown(page);
     gap: 0.2rem;
     padding: 0.95rem 1rem;
     border-radius: 1rem;
-    text-decoration: none;
-    color: var(--text);
     border: 1px solid rgba(255, 255, 255, 0.1);
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
@@ -281,11 +279,6 @@ const markdown = pageMarkdown(page);
       border-color 140ms ease,
       background 140ms ease;
   }
-  .resource-link:link,
-  .resource-link:visited {
-    color: var(--text);
-  }
-
   .resource-link:hover {
     transform: translateY(-1px);
     border-color: rgba(156, 255, 79, 0.32);
@@ -294,14 +287,11 @@ const markdown = pageMarkdown(page);
       rgba(4, 7, 18, 0.76);
   }
   .resource-link:focus-visible {
-    outline: 2px solid rgba(156, 255, 79, 0.9);
-    outline-offset: 3px;
     border-color: rgba(156, 255, 79, 0.4);
   }
 
   .resource-link-label {
     font-weight: 700;
-    color: var(--text);
   }
 
   .resource-link-helper {

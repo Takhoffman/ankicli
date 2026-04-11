@@ -71,47 +71,47 @@ const withBase = (path: string) => new URL(path, `https://takhoffman.github.io${
   </section>
 
   <section class="docs-grid section">
-    <a class="card link-card" href={withBase("docs/bundled-skills")}>
+    <a class="card link-card surface-link" href={withBase("docs/bundled-skills")}>
       <p class="card-kicker">Bundles</p>
       <h3>Skill folders and install targets</h3>
       <p>Open the shipped GitHub bundle for Codex, Claude Code, or OpenClaw, or grab the exact install command for your local skills home.</p>
     </a>
-    <a class="card link-card" href={withBase("docs/learning-plans")}>
+    <a class="card link-card surface-link" href={withBase("docs/learning-plans")}>
       <p class="card-kicker">Study systems</p>
       <h3>Learning plans</h3>
       <p>Goal-driven study for travel, anime immersion, medical exams, and time-bounded progress.</p>
     </a>
-    <a class="card link-card" href={withBase("docs/recipes")}>
+    <a class="card link-card surface-link" href={withBase("docs/recipes")}>
       <p class="card-kicker">Workflows</p>
       <h3>Recipes</h3>
       <p>Mechanics for image generation, TTS enrichment, source-to-deck workflows, and repair flows.</p>
     </a>
-    <a class="card link-card" href={withBase("docs/cli-guide")}>
+    <a class="card link-card surface-link" href={withBase("docs/cli-guide")}>
       <p class="card-kicker">Reference</p>
       <h3>CLI guide</h3>
       <p>Command shape, targeting flags, help output, JSON mode, and safety switches.</p>
     </a>
-    <a class="card link-card" href={withBase("docs/common-tasks")}>
+    <a class="card link-card surface-link" href={withBase("docs/common-tasks")}>
       <p class="card-kicker">Commands</p>
       <h3>Common tasks</h3>
       <p>Exact commands for inspection, search, note changes, backup, sync, and study.</p>
     </a>
-    <a class="card link-card" href={withBase("docs/profiles-and-collections")}>
+    <a class="card link-card surface-link" href={withBase("docs/profiles-and-collections")}>
       <p class="card-kicker">Targeting</p>
       <h3>Profiles and collections</h3>
       <p>Use profile-aware commands or point directly at a collection file.</p>
     </a>
-    <a class="card link-card" href={withBase("docs/sync-and-backups")}>
+    <a class="card link-card surface-link" href={withBase("docs/sync-and-backups")}>
       <p class="card-kicker">Safety</p>
       <h3>Sync and backups</h3>
       <p>Safe preflight, stored credentials, and local backup recovery flows.</p>
     </a>
-    <a class="card link-card" href={withBase("docs/study")}>
+    <a class="card link-card surface-link" href={withBase("docs/study")}>
       <p class="card-kicker">Sessions</p>
       <h3>Study mode</h3>
       <p>Run local tutor-style sessions without turning the CLI into a fragile TUI.</p>
     </a>
-    <a class="card link-card" href={withBase("docs/troubleshooting")}>
+    <a class="card link-card surface-link" href={withBase("docs/troubleshooting")}>
       <p class="card-kicker">Diagnostics</p>
       <h3>Troubleshooting</h3>
       <p>Debug install issues, runtime validation failures, and profile resolution problems.</p>
@@ -154,7 +154,7 @@ ankicli --json doctor backend</code></pre>
   .operator-note {
     max-width: 60ch;
   }
-  .primary, .secondary, .link-card {
+  .primary, .secondary {
     text-decoration: none;
   }
   .primary, .secondary {
@@ -209,29 +209,21 @@ ankicli --json doctor backend</code></pre>
       background 160ms ease,
       box-shadow 160ms ease;
   }
-  .link-card:link,
-  .link-card:visited {
-    color: var(--text);
-  }
   .link-card:hover {
     transform: translateY(-4px);
     border-color: rgba(156, 255, 79, 0.3);
     box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
   }
   .link-card:focus-visible {
-    outline: 2px solid rgba(156, 255, 79, 0.9);
-    outline-offset: 3px;
     border-color: rgba(156, 255, 79, 0.4);
   }
   .link-card h3 {
     font-size: clamp(1.4rem, 2vw, 1.8rem);
     line-height: 1.08;
-    color: var(--text);
   }
   .link-card p {
     margin: 0;
     max-width: 32ch;
-    color: var(--muted);
   }
   .card-kicker {
     color: var(--lime);
