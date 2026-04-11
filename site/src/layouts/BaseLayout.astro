@@ -40,10 +40,32 @@ const withBase = (path: string) => new URL(path, `https://takhoffman.github.io${
           linear-gradient(180deg, #091126 0%, #050816 100%);
       }
       a { color: inherit; }
+      a:focus-visible,
+      button:focus-visible {
+        outline: 2px solid rgba(156, 255, 79, 0.9);
+        outline-offset: 3px;
+      }
       .shell {
         min-height: 100vh;
         display: flex;
         flex-direction: column;
+      }
+      .skip-link {
+        position: absolute;
+        top: 0.75rem;
+        left: 1rem;
+        z-index: 20;
+        padding: 0.7rem 0.95rem;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--lime), #d9ff66);
+        color: #061117;
+        font-weight: 800;
+        text-decoration: none;
+        transform: translateY(-180%);
+        transition: transform 160ms ease;
+      }
+      .skip-link:focus-visible {
+        transform: translateY(0);
       }
       header {
         position: sticky;
@@ -161,6 +183,7 @@ const withBase = (path: string) => new URL(path, `https://takhoffman.github.io${
     </style>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
     <div class="shell">
       <header>
         <div class="nav">
@@ -176,7 +199,7 @@ const withBase = (path: string) => new URL(path, `https://takhoffman.github.io${
           </nav>
         </div>
       </header>
-      <main>
+      <main id="main-content">
         <slot />
       </main>
       <footer class="footer">

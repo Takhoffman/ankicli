@@ -12,7 +12,7 @@ const { showManual = true } = Astro.props;
           <p class="eyebrow">{platform.label}</p>
           <h3>One-command install</h3>
         </div>
-        <button class="copy-button" data-copy={platform.installCommand}>Copy Command</button>
+        <button type="button" class="copy-button" data-copy={platform.installCommand}>Copy Command</button>
       </div>
       <pre><code>{platform.installCommand}</code></pre>
       <p>Verify:</p>

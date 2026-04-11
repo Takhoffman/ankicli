@@ -19,7 +19,7 @@ const markdown = pageMarkdown(page);
       <div class="hero-side-card">
         <h2 class="side-title">Copy this guide</h2>
         <p class="side-copy">Paste it into Claude, Codex, or OpenClaw for structured context.</p>
-        <button class="copy-button" data-copy={markdown}>Copy Page</button>
+        <button type="button" class="copy-button" data-copy={markdown}>Copy Page</button>
         <p class="copy-helper">{page.helper}</p>
       </div>
     </div>
@@ -70,7 +70,7 @@ const markdown = pageMarkdown(page);
             >
               <div class="command-head">
                 <h3>{command.label}</h3>
-                <button class="copy-button copy-button-small" data-copy={command.body}>Copy Command</button>
+                <button type="button" class="copy-button copy-button-small" data-copy={command.body}>Copy Command</button>
               </div>
               <pre><code>{command.body}</code></pre>
             </div>
