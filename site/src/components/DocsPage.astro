@@ -281,6 +281,10 @@ const markdown = pageMarkdown(page);
       border-color 140ms ease,
       background 140ms ease;
   }
+  .resource-link:link,
+  .resource-link:visited {
+    color: var(--text);
+  }
 
   .resource-link:hover {
     transform: translateY(-1px);
@@ -289,9 +293,15 @@ const markdown = pageMarkdown(page);
       linear-gradient(180deg, rgba(156, 255, 79, 0.08), rgba(255, 255, 255, 0.02)),
       rgba(4, 7, 18, 0.76);
   }
+  .resource-link:focus-visible {
+    outline: 2px solid rgba(156, 255, 79, 0.9);
+    outline-offset: 3px;
+    border-color: rgba(156, 255, 79, 0.4);
+  }
 
   .resource-link-label {
     font-weight: 700;
+    color: var(--text);
   }
 
   .resource-link-helper {
