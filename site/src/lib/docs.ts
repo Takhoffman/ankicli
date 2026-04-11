@@ -1,4 +1,4 @@
-import { installerScripts, platformCards } from "./install";
+import { installerScripts, platformCards, repoUrl } from "./install";
 
 export type CommandBlock = {
   label: string;
@@ -10,6 +10,11 @@ export type DocSection = {
   body: string[];
   bullets?: string[];
   commands?: CommandBlock[];
+  links?: {
+    label: string;
+    href: string;
+    helper?: string;
+  }[];
 };
 
 export type DocPage = {
@@ -66,6 +71,10 @@ references/collection-management.md
 references/diagnostics.md
 references/sync-and-backups.md
 references/learning-plans.md`;
+const bundledSkillsUrl = `${repoUrl}/tree/main/bundled-skills`;
+const codexSkillUrl = `${repoUrl}/tree/main/bundled-skills/codex/ankicli`;
+const claudeSkillUrl = `${repoUrl}/tree/main/bundled-skills/claude/ankicli`;
+const openclawSkillUrl = `${repoUrl}/tree/main/bundled-skills/openclaw/ankicli`;
 
 function installCommandFor(platformId: "macos" | "linux" | "windows"): string {
   const platform = platformCards.find((item) => item.id === platformId);
@@ -76,42 +85,42 @@ function installCommandFor(platformId: "macos" | "linux" | "windows"): string {
 }
 
 export const docsPages: Record<string, DocPage> = {
-  "agent-skills": {
-    title: "Agent skills",
-    eyebrow: "Skills",
+  "bundled-skills": {
+    title: "Bundled skill guide",
+    eyebrow: "GitHub bundles",
     summary:
-      "Use the single bundled ankicli umbrella skill when you want a public, harness-agnostic agent operating guide for Codex, Claude Code, OpenClaw, or another compatible skill home today.",
-    helper: "Paste this page into your LLM chat or copy a specific skill file directly.",
+      "This page is the index for the shipped ankicli skill bundles: where they live in GitHub, which harness targets exist, and how to install the same public bundle into a local skill home.",
+    helper: "Use the links below when you want the source folder in GitHub, or copy the install commands when you want the local bundle installed.",
     whenToUse: [
-      "You want one installable skill instead of choosing between multiple ankicli sub-skills.",
-      "You want a stable CLI install flow for Codex, Claude Code, OpenClaw, or another compatible agent harness.",
+      "You want the GitHub location of the bundled ankicli skill instead of a long explanation of the skill format.",
+      "You want the install command for Codex, Claude Code, OpenClaw, or a custom skills directory.",
     ],
     agentShouldKnow: [
-      "The public skill surface is now one umbrella skill named `ankicli`.",
-      "Use the umbrella SKILL.md to choose the right reference file instead of treating study, note authoring, diagnostics, or collection management as separate install-time choices.",
+      "The public skill surface is one umbrella skill named `ankicli`, shipped per target under `bundled-skills/<target>/ankicli/`.",
+      "The top-level `SKILL.md` routes into focused reference files under `references/`; operators do not need to pick separate sub-skills at install time.",
     ],
     sections: [
       {
-        heading: "What this page ships",
+        heading: "Open the bundle in GitHub",
         body: [
-          "The shipped public copies live under `bundled-skills/<target>/ankicli/` and are bundled into the ankicli package. That makes them installable through `ankicli skill install` without waiting for the plugin release.",
-          "The skill uses progressive disclosure: one `SKILL.md` plus focused files under `references/` for setup, study, authoring, diagnostics, sync, and learning plans.",
+          "If the goal is 'show me the skill,' the GitHub folders are the clearest source. Each target ships the same umbrella skill layout with a top-level `SKILL.md` and a `references/` directory.",
+          "These folders are also what ankicli installs locally, so the GitHub tree and the installed copy stay aligned.",
         ],
-        commands: [
-          {
-            label: "Public skill bundle",
-            body: `bundled-skills/codex/ankicli/SKILL.md\nbundled-skills/claude/ankicli/SKILL.md\nbundled-skills/openclaw/ankicli/SKILL.md\n${umbrellaReferenceMap}`,
-          },
+        links: [
+          { label: "Browse all bundled skills", href: bundledSkillsUrl, helper: "See every shipped target bundle." },
+          { label: "Codex skill folder", href: codexSkillUrl, helper: "Open `bundled-skills/codex/ankicli/`." },
+          { label: "Claude Code skill folder", href: claudeSkillUrl, helper: "Open `bundled-skills/claude/ankicli/`." },
+          { label: "OpenClaw skill folder", href: openclawSkillUrl, helper: "Open `bundled-skills/openclaw/ankicli/`." },
         ],
         bullets: [
-          "This umbrella skill is the public source of truth for standalone skill install and docs.",
-          "The OpenClaw plugin remains a separate future/richer integration path, not the primary install path right now.",
+          "The GitHub folders are the simplest thing to link from docs because they match what users actually install.",
+          "The OpenClaw plugin is a separate integration surface, not the source of truth for the standalone public bundle.",
         ],
       },
       {
-        heading: "Install the ankicli skill",
+        heading: "Install the same bundle locally",
         body: [
-          "Install the same umbrella skill into whatever agent home you use. The skill itself decides which reference file to read for the current task.",
+          "Install the same umbrella skill into the harness you use locally. The install target chooses the destination folder; the skill content stays the same.",
         ],
         commands: [
           { label: "Install into Codex home", body: "ankicli skill install --target codex" },
@@ -122,9 +131,9 @@ export const docsPages: Record<string, DocPage> = {
         ],
       },
       {
-        heading: "Umbrella SKILL.md",
+        heading: "How the bundle is organized",
         body: [
-          "This is the only top-level SKILL.md the operator installs. It stays short and routes the agent to the relevant reference file for the task at hand.",
+          "The bundle is intentionally simple: one `SKILL.md` at the top, then a small set of focused references. That makes the docs easier to navigate and keeps install-time choices out of the operator workflow.",
         ],
         commands: [
           { label: "SKILL.md", body: umbrellaSkillBody },
@@ -133,7 +142,7 @@ export const docsPages: Record<string, DocPage> = {
       {
         heading: "Reference files",
         body: [
-          "These files provide progressive disclosure. The umbrella skill should read only the references needed for the current task instead of loading every workflow at once.",
+          "These are the focused references the umbrella skill points to. Read the one that matches the job instead of dumping every workflow into a prompt.",
         ],
         commands: [
           { label: "Reference files", body: umbrellaReferenceMap },
@@ -149,10 +158,10 @@ export const docsPages: Record<string, DocPage> = {
         ],
       },
       {
-        heading: "How to use them",
+        heading: "Recommended operator flow",
         body: [
-          "A good operator pattern is: install ankicli, verify the local runtime, install the umbrella skill into the local skill home, then hand the matching docs page or `Copy Page` output to the agent.",
-          "The agent should treat the references as internal task-routing, not as install-time choices the operator has to make.",
+          "Use the GitHub folder when someone asks where the skill lives. Use the install command when someone wants it in a local skill home. Use the matching docs page when an agent needs task-specific operating context.",
+          "That keeps the docs page acting like an index and keeps the bundle itself as the durable source of truth.",
         ],
         commands: [
           {

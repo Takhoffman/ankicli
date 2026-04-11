@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -45,3 +46,31 @@ def test_generated_anki_study_skill_mentions_media_output_guidance() -> None:
     assert "current_card.view" in content
     assert "present_view" not in content
     assert "current_card.tutoring_summary" in content
+
+
+@pytest.mark.unit
+def test_bundled_openclaw_skill_frontmatter_includes_openclaw_metadata_contract() -> None:
+    skill_path = (
+        Path(__file__).resolve().parents[2]
+        / "bundled-skills"
+        / "openclaw"
+        / "ankicli"
+        / "SKILL.md"
+    )
+    content = skill_path.read_text()
+
+    assert content.startswith("---\n")
+    _, frontmatter, _ = content.split("---\n", 2)
+
+    fields: dict[str, str] = {}
+    for raw_line in frontmatter.strip().splitlines():
+        key, value = raw_line.split(": ", 1)
+        fields[key] = value
+
+    assert fields["name"] == "ankicli"
+    assert fields["description"]
+    assert fields["homepage"] == "https://takhoffman.github.io/ankicli/docs/bundled-skills/"
+
+    metadata = json.loads(fields["metadata"])
+    assert metadata["openclaw"]["emoji"] == "🧠"
+    assert metadata["openclaw"]["requires"]["bins"] == ["ankicli"]

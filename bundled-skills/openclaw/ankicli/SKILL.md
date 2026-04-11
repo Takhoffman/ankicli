@@ -1,6 +1,8 @@
 ---
 name: ankicli
 description: Use when an agent needs to inspect, study, create, modify, organize, sync, or troubleshoot an Anki collection through ankicli. Covers setup, study workflows, note authoring, collection and deck management, diagnostics, sync and backups, and goal-driven learning plans.
+homepage: https://takhoffman.github.io/ankicli/docs/bundled-skills/
+metadata: {"openclaw":{"emoji":"🧠","requires":{"bins":["ankicli"]}}}
 ---
 
 Use ankicli as the local source of truth for Anki operations.

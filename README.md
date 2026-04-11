@@ -4,7 +4,7 @@
 
 Docs and product site: [takhoffman.github.io/ankicli](https://takhoffman.github.io/ankicli/)
 
-Standalone agent skill: [agent skills](https://takhoffman.github.io/ankicli/docs/agent-skills/)
+Standalone agent skill: [bundled skills](https://takhoffman.github.io/ankicli/docs/bundled-skills/)
 
 Goal-driven study: [learning plans](https://takhoffman.github.io/ankicli/docs/learning-plans/)
 
@@ -119,7 +119,7 @@ ankicli workspace set --collection /path/to/collection.anki2
 ## Docs
 
 - Product site: [takhoffman.github.io/ankicli](https://takhoffman.github.io/ankicli/)
-- Agent skills: [agent skills](https://takhoffman.github.io/ankicli/docs/agent-skills/)
+- Bundled skills: [bundled skills](https://takhoffman.github.io/ankicli/docs/bundled-skills/)
 - Learning plans: [learning plans](https://takhoffman.github.io/ankicli/docs/learning-plans/)
 - Recipes: [recipes](https://takhoffman.github.io/ankicli/docs/recipes/)
 - CLI guide: [cli guide](https://takhoffman.github.io/ankicli/docs/cli-guide/)

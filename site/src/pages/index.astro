@@ -71,39 +71,48 @@ const withBase = (path: string) => new URL(path, `https://takhoffman.github.io${
   </section>
 
   <section class="docs-grid section">
-    <a class="card link-card" href={withBase("docs/agent-skills")}>
-      <h3>Agent skills</h3>
-      <p>Install the single ankicli umbrella skill for Codex, Claude Code, OpenClaw, or another harness without waiting for the plugin.</p>
+    <a class="card link-card" href={withBase("docs/bundled-skills")}>
+      <p class="card-kicker">Bundles</p>
+      <h3>Skill folders and install targets</h3>
+      <p>Open the shipped GitHub bundle for Codex, Claude Code, or OpenClaw, or grab the exact install command for your local skills home.</p>
     </a>
     <a class="card link-card" href={withBase("docs/learning-plans")}>
+      <p class="card-kicker">Study systems</p>
       <h3>Learning plans</h3>
       <p>Goal-driven study for travel, anime immersion, medical exams, and time-bounded progress.</p>
     </a>
     <a class="card link-card" href={withBase("docs/recipes")}>
+      <p class="card-kicker">Workflows</p>
       <h3>Recipes</h3>
       <p>Mechanics for image generation, TTS enrichment, source-to-deck workflows, and repair flows.</p>
     </a>
     <a class="card link-card" href={withBase("docs/cli-guide")}>
+      <p class="card-kicker">Reference</p>
       <h3>CLI guide</h3>
       <p>Command shape, targeting flags, help output, JSON mode, and safety switches.</p>
     </a>
     <a class="card link-card" href={withBase("docs/common-tasks")}>
+      <p class="card-kicker">Commands</p>
       <h3>Common tasks</h3>
       <p>Exact commands for inspection, search, note changes, backup, sync, and study.</p>
     </a>
     <a class="card link-card" href={withBase("docs/profiles-and-collections")}>
+      <p class="card-kicker">Targeting</p>
       <h3>Profiles and collections</h3>
       <p>Use profile-aware commands or point directly at a collection file.</p>
     </a>
     <a class="card link-card" href={withBase("docs/sync-and-backups")}>
+      <p class="card-kicker">Safety</p>
       <h3>Sync and backups</h3>
       <p>Safe preflight, stored credentials, and local backup recovery flows.</p>
     </a>
     <a class="card link-card" href={withBase("docs/study")}>
+      <p class="card-kicker">Sessions</p>
       <h3>Study mode</h3>
       <p>Run local tutor-style sessions without turning the CLI into a fragile TUI.</p>
     </a>
     <a class="card link-card" href={withBase("docs/troubleshooting")}>
+      <p class="card-kicker">Diagnostics</p>
       <h3>Troubleshooting</h3>
       <p>Debug install issues, runtime validation failures, and profile resolution problems.</p>
     </a>
@@ -184,8 +193,41 @@ ankicli --json doctor backend</code></pre>
     margin-bottom: 1rem;
   }
   .link-card {
-    display: block;
-    padding: 1.25rem;
+    display: grid;
+    align-content: start;
+    gap: 0.65rem;
+    min-height: 13.5rem;
+    padding: 1.35rem;
+    border-radius: 1.35rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018)),
+      linear-gradient(135deg, rgba(156, 255, 79, 0.06), rgba(255, 86, 207, 0.03)),
+      rgba(8, 12, 28, 0.9);
+    transition:
+      transform 160ms ease,
+      border-color 160ms ease,
+      background 160ms ease,
+      box-shadow 160ms ease;
+  }
+  .link-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(156, 255, 79, 0.3);
+    box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
+  }
+  .link-card h3 {
+    font-size: clamp(1.4rem, 2vw, 1.8rem);
+    line-height: 1.08;
+  }
+  .link-card p {
+    margin: 0;
+    max-width: 32ch;
+  }
+  .card-kicker {
+    color: var(--lime);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
   .workflow .link-card {
     text-decoration: none;
