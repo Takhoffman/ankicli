@@ -49,11 +49,12 @@ const { showManual = true } = Astro.props;
   .grid {
     display: grid;
     gap: 1rem;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .install-card {
     padding: 1.35rem;
+    min-width: 0;
   }
 
   .platform-head {
@@ -61,6 +62,10 @@ const { showManual = true } = Astro.props;
     align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
+  }
+
+  .platform-head > div {
+    min-width: 0;
   }
 
   .copy-button {
@@ -72,9 +77,45 @@ const { showManual = true } = Astro.props;
     background: linear-gradient(135deg, var(--pink), #ff8e64);
     color: #130912;
     cursor: pointer;
+    flex-shrink: 0;
   }
 
   p {
     margin: 1rem 0 0.4rem;
+  }
+
+  .install-card pre {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .install-card code {
+    display: block;
+    max-width: 100%;
+  }
+
+  @media (min-width: 860px) {
+    .grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1180px) {
+    .grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .platform-head {
+      flex-direction: column;
+    }
+
+    .copy-button {
+      width: 100%;
+      justify-content: center;
+    }
   }
 </style>
