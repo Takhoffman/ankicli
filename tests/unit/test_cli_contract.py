@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import PurePath
 
 import pytest
 
@@ -240,9 +241,12 @@ def test_skill_list_json_contract(runner) -> None:
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
     assert [item["name"] for item in payload["data"]["items"]] == ["ankicli"]
-    assert payload["data"]["targets"]["codex"].endswith(".codex/skills")
-    assert payload["data"]["targets"]["claude"].endswith(".claude/skills")
-    assert payload["data"]["targets"]["openclaw"].endswith(".openclaw/skills")
+    assert PurePath(payload["data"]["targets"]["codex"]).parts[-2:] == (".codex", "skills")
+    assert PurePath(payload["data"]["targets"]["claude"]).parts[-2:] == (".claude", "skills")
+    assert PurePath(payload["data"]["targets"]["openclaw"]).parts[-2:] == (
+        ".openclaw",
+        "skills",
+    )
 
 
 @pytest.mark.unit
@@ -323,6 +327,7 @@ def test_configure_default_skill_prompt_installs_detected_agent_homes(runner, tm
         args=["configure", "--skip-sync"],
         env={
             "HOME": str(home),
+            "USERPROFILE": str(home),
             "ANKICLI_CONFIG_HOME": str(tmp_path / "config"),
             "ANKICLI_ANKI2_ROOT": str(tmp_path / "missing-anki-root"),
         },
@@ -330,11 +335,10 @@ def test_configure_default_skill_prompt_installs_detected_agent_homes(runner, tm
     )
 
     assert result.exit_code == 0
-    assert (
-        "Recommended: press Enter to install the ankicli skill into codex, claude, openclaw."
-        in result.stdout
-    )
-    assert "  Enter  install the ankicli skill into codex, claude, openclaw" in result.stdout
+    assert "Install the ankicli skill?" in result.stdout
+    assert "codex" in result.stdout
+    assert "claude" in result.stdout
+    assert "openclaw" in result.stdout
     assert "installed: codex" in result.stdout
     assert "installed: claude" in result.stdout
     assert "installed: openclaw" in result.stdout

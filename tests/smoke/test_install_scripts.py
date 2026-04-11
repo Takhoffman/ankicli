@@ -6,6 +6,7 @@ import stat
 import subprocess
 import tarfile
 import zipfile
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -31,13 +32,7 @@ def _make_fake_binary(path: Path) -> None:
 
 
 def _write_checksum(path: Path) -> str:
-    process = subprocess.run(
-        ["shasum", "-a", "256", str(path)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return process.stdout.split()[0]
+    return sha256(path.read_bytes()).hexdigest()
 
 
 @pytest.mark.smoke

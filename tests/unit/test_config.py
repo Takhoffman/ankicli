@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -40,7 +41,8 @@ def test_workspace_config_round_trip(
 
     assert path == tmp_path / "workspaces/default/config.json"
     assert load_workspace_config("default") == config
-    assert path.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert path.stat().st_mode & 0o777 == 0o600
 
 
 @pytest.mark.unit

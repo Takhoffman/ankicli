@@ -240,8 +240,9 @@ def _install_ankiconnect_backend(monkeypatch: pytest.MonkeyPatch) -> AnkiConnect
 @pytest.mark.unit
 def test_shared_backend_capabilities_use_same_operation_keys(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    python_backend = _install_python_backend(monkeypatch, Path("/tmp/parity-cap.anki2"))
+    python_backend = _install_python_backend(monkeypatch, tmp_path / "parity-cap.anki2")
     ankiconnect_backend = _install_ankiconnect_backend(monkeypatch)
 
     python_ops = python_backend.backend_capabilities().supported_operations
