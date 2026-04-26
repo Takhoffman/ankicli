@@ -130,8 +130,8 @@ def main() -> None:
     for skill in snapshot["skills"]:
         skill_dir = SKILLS_ROOT / skill["slug"]
         skill_dir.mkdir(parents=True, exist_ok=True)
-        (skill_dir / "SKILL.md").write_text(render_skill(skill))
-    REFERENCE_PATH.write_text(render_reference(snapshot))
+        (skill_dir / "SKILL.md").write_text(render_skill(skill), encoding="utf-8")
+    REFERENCE_PATH.write_text(render_reference(snapshot), encoding="utf-8")
 
 
 if __name__ == "__main__":

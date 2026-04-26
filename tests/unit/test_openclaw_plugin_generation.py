@@ -39,7 +39,7 @@ def test_generated_anki_study_skill_mentions_media_output_guidance() -> None:
         / "anki-study"
         / "SKILL.md"
     )
-    content = skill_path.read_text()
+    content = skill_path.read_text(encoding="utf-8")
 
     assert "anki_study_card_details" in content
     assert "include media in the same response when it helps the learner" in content
@@ -57,7 +57,7 @@ def test_bundled_openclaw_skill_frontmatter_includes_openclaw_metadata_contract(
         / "ankicli"
         / "SKILL.md"
     )
-    content = skill_path.read_text()
+    content = skill_path.read_text(encoding="utf-8")
 
     assert content.startswith("---\n")
     _, frontmatter, _ = content.split("---\n", 2)
