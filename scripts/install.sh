@@ -81,12 +81,12 @@ download() {
 verify_checksum() {
   archive_path="$1"
   checksums_path="$2"
-  expected="$(awk -v name="$(basename "$archive_path")" '$2 == name { print $1 }' "$checksums_path")"
+  expected="$(LC_ALL=C awk -v name="$(basename "$archive_path")" '$2 == name { print $1 }' "$checksums_path")"
   [ -n "$expected" ] || fail "missing checksum for $(basename "$archive_path")"
   if command -v shasum >/dev/null 2>&1; then
-    actual="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
+    actual="$(LC_ALL=C shasum -a 256 "$archive_path" | LC_ALL=C awk '{print $1}')"
   elif command -v sha256sum >/dev/null 2>&1; then
-    actual="$(sha256sum "$archive_path" | awk '{print $1}')"
+    actual="$(LC_ALL=C sha256sum "$archive_path" | LC_ALL=C awk '{print $1}')"
   else
     fail "missing required checksum command: shasum or sha256sum"
   fi
@@ -97,7 +97,7 @@ extract_archive() {
   archive_path="$1"
   destination="$2"
   mkdir -p "$destination"
-  tar -xzf "$archive_path" -C "$destination" || fail "failed to extract archive"
+  LC_ALL=C tar -xzf "$archive_path" -C "$destination" || fail "failed to extract archive"
 }
 
 main() {

@@ -255,7 +255,16 @@ class AuthService:
         self.backend = backend
         self.credential_store = credential_store or _default_credential_store()
 
+    def _ensure_supported(self, operation: str) -> None:
+        if self.backend.supported_operations().get(operation, False):
+            return
+        raise BackendOperationUnsupportedError(
+            f"{operation} is not supported by the {self.backend.name} backend",
+            details={"backend": self.backend.name, "operation": operation},
+        )
+
     def status(self, collection_path: str | None) -> dict:
+        self._ensure_supported("auth.status")
         credential = self.credential_store.read(backend_name=self.backend.name)
         payload = self.backend.auth_status(
             None if collection_path is None else Path(collection_path),

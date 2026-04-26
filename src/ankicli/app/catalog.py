@@ -1021,6 +1021,7 @@ SKILL_SPECS: tuple[SkillSpec, ...] = (
 
 ALWAYS_AVAILABLE_BY_BACKEND: dict[str, set[str]] = {
     "python-anki": {
+        "auth.status",
         "profile.list",
         "profile.get",
         "profile.default",
