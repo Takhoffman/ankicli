@@ -31,7 +31,7 @@ def build_fixture() -> Path:
 
     manifest = {
         "fixture_name": "minimal",
-        "collection_path": str(COLLECTION_PATH),
+        "collection_path": COLLECTION_PATH.name,
         "schema_version": 1,
         "note_count": 0,
         "card_count": 0,

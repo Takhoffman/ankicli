@@ -26,6 +26,8 @@ def _copy_fixture_with_media(
 @pytest.mark.backend_python_anki
 def test_repo_fixture_is_built_and_deterministic(fixture_collection_path) -> None:
     assert fixture_collection_path.exists()
+    manifest = json.loads((fixture_collection_path.parent / "manifest.json").read_text())
+    assert manifest["collection_path"] == fixture_collection_path.name
 
     connection = sqlite3.connect(fixture_collection_path)
     try:
