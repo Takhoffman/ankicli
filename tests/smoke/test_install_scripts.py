@@ -35,6 +35,10 @@ def _write_checksum(path: Path) -> str:
     return sha256(path.read_bytes()).hexdigest()
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
 @pytest.mark.smoke
 def test_shell_installer_supports_versioned_local_release(tmp_path: Path) -> None:
     release_root = tmp_path / "release"
@@ -69,7 +73,7 @@ def test_shell_installer_supports_versioned_local_release(tmp_path: Path) -> Non
 
     result = subprocess.run(
         ["sh", "scripts/install.sh"],
-        cwd=Path(__file__).resolve().parents[2],
+        cwd=_repo_root(),
         capture_output=True,
         text=True,
         env=env,
@@ -80,6 +84,57 @@ def test_shell_installer_supports_versioned_local_release(tmp_path: Path) -> Non
     installed = install_bin_dir / "ankicli"
     assert installed.exists()
     assert "Installed ankicli 1.2.3" in result.stdout
+
+
+@pytest.mark.smoke
+def test_shell_installer_rejects_unsafe_version_before_install(tmp_path: Path) -> None:
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    sentinel = outside_dir / "sentinel.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    result = subprocess.run(
+        ["sh", "scripts/install.sh"],
+        cwd=_repo_root(),
+        capture_output=True,
+        text=True,
+        env=os.environ
+        | {
+            "VERSION": "../outside",
+            "ANKICLI_TARGET": "darwin-x64",
+            "ANKICLI_RELEASES_BASE": (tmp_path / "release").as_uri(),
+            "ANKICLI_INSTALL_BIN_DIR": str(tmp_path / "bin"),
+            "ANKICLI_INSTALL_ROOT": str(tmp_path / "install"),
+        },
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "invalid release version" in result.stderr
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.smoke
+def test_shell_installer_rejects_unknown_target_before_download(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["sh", "scripts/install.sh"],
+        cwd=_repo_root(),
+        capture_output=True,
+        text=True,
+        env=os.environ
+        | {
+            "VERSION": "latest",
+            "ANKICLI_TARGET": "../darwin-x64",
+            "ANKICLI_RELEASE_API": (tmp_path / "missing-release.json").as_uri(),
+            "ANKICLI_RELEASES_BASE": (tmp_path / "release").as_uri(),
+            "ANKICLI_INSTALL_BIN_DIR": str(tmp_path / "bin"),
+            "ANKICLI_INSTALL_ROOT": str(tmp_path / "install"),
+        },
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "invalid release target" in result.stderr
 
 
 @pytest.mark.smoke
@@ -102,7 +157,7 @@ def test_shell_installer_fails_on_bad_checksum(tmp_path: Path) -> None:
 
     result = subprocess.run(
         ["sh", "scripts/install.sh"],
-        cwd=Path(__file__).resolve().parents[2],
+        cwd=_repo_root(),
         capture_output=True,
         text=True,
         env=os.environ
@@ -139,6 +194,7 @@ def test_powershell_installer_script_is_version_and_path_aware(tmp_path: Path) -
 
     checksum_path = archive_path.parent / "ankicli-1.2.3-checksums.txt"
     checksum_path.write_text(
+        f"{'0' * 64}  prefix-{archive_path.name}\n"
         f"{_write_checksum(archive_path)}  {archive_path.name}\n",
         encoding="utf-8",
     )
@@ -153,7 +209,7 @@ def test_powershell_installer_script_is_version_and_path_aware(tmp_path: Path) -
             "-Version",
             "1.2.3",
         ],
-        cwd=Path(__file__).resolve().parents[2],
+        cwd=_repo_root(),
         capture_output=True,
         text=True,
         env=os.environ
@@ -168,3 +224,40 @@ def test_powershell_installer_script_is_version_and_path_aware(tmp_path: Path) -
 
     assert result.returncode == 0, result.stderr
     assert (install_root / "1.2.3" / "ankicli.exe").exists()
+
+
+@pytest.mark.smoke
+def test_powershell_installer_rejects_unsafe_version_before_install(tmp_path: Path) -> None:
+    if shutil.which("pwsh") is None:
+        pytest.skip("pwsh is not installed")
+
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    sentinel = outside_dir / "sentinel.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            "scripts/install.ps1",
+            "-Version",
+            "1/../../outside",
+        ],
+        cwd=_repo_root(),
+        capture_output=True,
+        text=True,
+        env=os.environ
+        | {
+            "ANKICLI_TARGET": "windows-x64",
+            "ANKICLI_RELEASES_BASE": (tmp_path / "release").as_uri(),
+            "ANKICLI_INSTALL_ROOT": str(tmp_path / "install"),
+            "ANKICLI_SKIP_VERIFY": "1",
+        },
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "invalid release version" in result.stderr
+    assert sentinel.read_text(encoding="utf-8") == "keep"
