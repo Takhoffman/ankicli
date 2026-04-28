@@ -7,21 +7,21 @@ All notable changes to `ankicli` are documented here.
 ## 0.1.2 - 2026-04-28
 
 - Hardened release automation so tag/version mismatches fail before platform builds or publish
-  steps run. Thanks `stainlu`.
+  steps run. Thanks @stanlu.
 - Made release publishing reruns safer by allowing existing GitHub release assets and PyPI files
-  to be handled idempotently. Thanks `stainlu`.
+  to be handled idempotently. Thanks @stanlu.
 - Hardened `auth status` so unsupported live-desktop backends return structured unsupported
-  responses before reading local credentials. Thanks `stainlu`.
+  responses before reading local credentials. Thanks @stanlu.
 - Made installer checksum and extraction paths more deterministic under inherited locale settings.
-  Thanks `stainlu`.
+  Thanks @stanlu.
 - Promoted deterministic fixture integration, editable-entrypoint e2e, packaging, and site checks
-  into the CI release confidence path. Thanks `stainlu`.
+  into the CI release confidence path. Thanks @stanlu.
 - Made fixture metadata relocatable and excluded local bootstrap/cache/venv/build output from source
-  distributions. Thanks `stainlu`.
+  distributions. Thanks @stanlu.
 - Hardened shell and PowerShell installers by validating release versions and targets before
-  download, checksum lookup, extraction, or install replacement. Thanks `stainlu`.
+  download, checksum lookup, extraction, or install replacement. Thanks @stanlu.
 - Tightened PowerShell checksum matching to use exact archive-name fields instead of substring
-  matches. Thanks `stainlu`.
+  matches. Thanks @stanlu.
 
 ## 0.1.1 - 2026-04-11
 
