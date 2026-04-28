@@ -5,10 +5,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import plugin from "../index.js";
+import { buildCliArgv, resolvePluginConfig } from "../src/ankicli-tool.js";
 
 function createFakeAnkicli({ studyDetails, studyRevealData, studyStartData } = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "ankicli-plugin-test-"));
   const scriptPath = path.join(dir, "fake-ankicli.mjs");
+  const commandPath =
+    process.platform === "win32" ? path.join(dir, "fake-ankicli.cmd") : scriptPath;
   const serializedStudyDetails = JSON.stringify(
     studyDetails ?? {
       session: {
@@ -291,16 +294,69 @@ if (args.includes("catalog") && args.includes("export")) {
 }
 console.log(JSON.stringify(payload));
 `;
-  writeFileSync(scriptPath, script);
-  chmodSync(scriptPath, 0o755);
+  writeFileSync(scriptPath, script, "utf8");
+  if (process.platform === "win32") {
+    writeFileSync(
+      commandPath,
+      `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`,
+      "utf8",
+    );
+  } else {
+    chmodSync(scriptPath, 0o755);
+  }
   return {
     dir,
-    scriptPath,
+    scriptPath: commandPath,
     cleanup() {
       rmSync(dir, { recursive: true, force: true });
     },
   };
 }
+
+test("resolvePluginConfig treats forward and backslash ankicli paths as paths on every platform", () => {
+  const resolved = [];
+  const api = {
+    pluginConfig: {
+      ankicliPath: "tools\\ankicli.cmd",
+      collectionPath: "fixtures/collection.anki2",
+      backend: "python-anki",
+      ankiconnectUrl: "http://127.0.0.1:8765",
+    },
+    resolvePath(value) {
+      resolved.push(value);
+      return `resolved:${value}`;
+    },
+  };
+
+  const config = resolvePluginConfig(api);
+
+  assert.equal(config.ankicliPath, "resolved:tools\\ankicli.cmd");
+  assert.equal(config.collectionPath, "resolved:fixtures/collection.anki2");
+  assert.equal(config.backend, "python-anki");
+  assert.equal(config.ankiconnectUrl, "http://127.0.0.1:8765");
+  assert.deepEqual(resolved, ["tools\\ankicli.cmd", "fixtures/collection.anki2"]);
+});
+
+test("buildCliArgv preserves Windows collection paths as one argv value", () => {
+  assert.deepEqual(
+    buildCliArgv(
+      {
+        backend: "python-anki",
+        collectionPath: "C:\\Users\\Ada Lovelace\\Anki\\User 1\\collection.anki2",
+      },
+      ["collection", "info"],
+    ),
+    [
+      "--json",
+      "--backend",
+      "python-anki",
+      "--collection",
+      "C:\\Users\\Ada Lovelace\\Anki\\User 1\\collection.anki2",
+      "collection",
+      "info",
+    ],
+  );
+});
 
 test("register uses plugin_tools from catalog export and filters by tool mode", async () => {
   const fake = createFakeAnkicli();

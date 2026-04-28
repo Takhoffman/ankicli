@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -11,8 +10,6 @@ import pytest
 
 @pytest.mark.unit
 def test_openclaw_plugin_catalog_generation_contract() -> None:
-    if os.name == "nt":
-        pytest.skip("OpenClaw plugin catalog generation contract is not Windows-portable yet")
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is required for the OpenClaw plugin generation contract test")

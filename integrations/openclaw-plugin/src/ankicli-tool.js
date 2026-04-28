@@ -3,14 +3,26 @@ import path from "node:path";
 
 const BACKEND_VALUES = new Set(["python-anki", "ankiconnect"]);
 
+function looksLikePath(value) {
+  return (
+    path.isAbsolute(value) ||
+    value.startsWith(".") ||
+    value.includes("/") ||
+    value.includes("\\")
+  );
+}
+
+function usesWindowsCommandShell(execPath) {
+  return process.platform === "win32" && /\.(?:bat|cmd)$/i.test(execPath);
+}
+
 export function resolvePluginConfig(api) {
   const config = api.pluginConfig ?? {};
   const rawPath =
     typeof config.ankicliPath === "string" && config.ankicliPath.trim()
       ? config.ankicliPath.trim()
       : "ankicli";
-  const ankicliPath =
-    rawPath.includes(path.sep) || rawPath.startsWith(".") ? api.resolvePath(rawPath) : rawPath;
+  const ankicliPath = looksLikePath(rawPath) ? api.resolvePath(rawPath) : rawPath;
   const collectionPath =
     typeof config.collectionPath === "string" && config.collectionPath.trim()
       ? api.resolvePath(config.collectionPath.trim())
@@ -48,6 +60,7 @@ export async function runSubprocessOnce({ execPath, argv, env, timeoutMs, maxStd
     const child = spawn(execPath, argv, {
       env: { ...process.env, ...env },
       stdio: ["ignore", "pipe", "pipe"],
+      shell: usesWindowsCommandShell(execPath),
     });
 
     let stdout = "";
@@ -113,6 +126,7 @@ function runSubprocessSync({ execPath, argv, env, timeoutMs, maxStdoutBytes }) {
     encoding: "utf8",
     timeout: Math.max(200, timeoutMs),
     maxBuffer: maxStdoutBytes,
+    shell: usesWindowsCommandShell(execPath),
   });
   if (result.error) {
     throw result.error;
