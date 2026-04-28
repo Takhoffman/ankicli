@@ -18,6 +18,40 @@ Use this only when the operator explicitly wants to ship.
 The package version uses `X.Y.Z`.
 The git tag uses `vX.Y.Z`.
 
+## Proper release sequence
+
+For a normal prepared-release PR, do this order:
+
+1. merge the release-prep PR into `main`
+2. update the local primary checkout to `origin/main`
+3. rerun release-state preflight for the exact version and tag
+4. clean up stale release/tag state only if the operator explicitly approved the exact targets
+5. create an annotated tag on the verified `main` commit
+6. push only the release tag
+7. watch the release workflow to completion
+8. verify GitHub Release assets, checksums, installers, docs, and optional PyPI state
+9. draft release announcement copy after the shipped surfaces are confirmed
+
+Suggested command shape:
+
+```bash
+gh pr merge <release-pr> --squash --delete-branch --match-head-commit <head-sha>
+git fetch origin --tags
+git switch main
+git pull --ff-only origin main
+git status --short
+rg -n '^version = ' pyproject.toml
+git ls-remote --tags origin 'refs/tags/vX.Y.Z'
+gh release view vX.Y.Z --repo Takhoffman/ankicli
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
+gh run list --repo Takhoffman/ankicli --workflow release --limit 5
+gh run watch <run-id> --repo Takhoffman/ankicli --exit-status
+gh release view vX.Y.Z --repo Takhoffman/ankicli --json name,tagName,url,assets
+```
+
+Never push `main` as part of this sequence. The only push after merge should be the release tag.
+
 ## Release-state cleanup
 
 Deleting GitHub Releases or remote tags is destructive. Only do it when the operator explicitly
@@ -89,3 +123,28 @@ Treat these as release-blocking:
 - do not update docs install commands ad hoc without verifying the installer contract
 - do not conflate PyPI success with release success
 - do not change executable name and package name casually
+
+## Release announcement drafts
+
+Draft social copy only after the release exists and assets are verified, unless the operator asks
+for preview copy. Keep it factual, compact, and tied to user-visible value.
+
+Prepare two or three formats instead of one final post:
+
+- Short ship note:
+  `ankicli vX.Y.Z is out: <primary user-visible change>. Also includes <secondary change> and
+  <reliability/installer/docs note>. <release-url>`
+- Contributor thanks:
+  `ankicli vX.Y.Z is live. This release improves <area>, hardens <area>, and tightens <area>.
+  Thanks @handle for the PRs behind this one. <release-url>`
+- Maintainer-focused:
+  `Released ankicli vX.Y.Z with safer release automation, stronger installer validation, and a
+  more deterministic test/release path. Useful if you run Anki workflows from the terminal.
+  <release-url>`
+
+For Twitter/X-style drafts:
+
+- keep under 280 characters unless the operator asks for a thread
+- include the release URL placeholder if the real URL is not verified yet
+- use public handles only when the operator supplied them or the PR/release uses them publicly
+- do not invent benchmarks, adoption claims, or compatibility promises
