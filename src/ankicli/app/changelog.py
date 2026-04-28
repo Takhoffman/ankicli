@@ -33,19 +33,18 @@ def _read_changelog_text() -> tuple[str, str]:
 
 def _latest_section(markdown: str) -> ChangelogSelection:
     lines = markdown.splitlines()
-    start = next((index for index, line in enumerate(lines) if line.startswith("## ")), None)
-    if start is None:
+    section_starts = [index for index, line in enumerate(lines) if line.startswith("## ")]
+    if not section_starts:
         return ChangelogSelection(title="Changelog", content=markdown.strip(), full=True)
-    end = next(
-        (
-            index
-            for index, line in enumerate(lines[start + 1 :], start=start + 1)
-            if line.startswith("## ")
-        ),
-        len(lines),
-    )
-    title = lines[start].lstrip("#").strip()
-    content = "\n".join(lines[start:end]).strip()
+    for position, start in enumerate(section_starts):
+        end = section_starts[position + 1] if position + 1 < len(section_starts) else len(lines)
+        content_lines = lines[start + 1 : end]
+        if any(line.strip() for line in content_lines):
+            title = lines[start].lstrip("#").strip()
+            content = "\n".join(lines[start:end]).strip()
+            return ChangelogSelection(title=title, content=content, full=False)
+    title = lines[section_starts[0]].lstrip("#").strip()
+    content = "\n".join(lines[section_starts[0] :]).strip()
     return ChangelogSelection(title=title, content=content, full=False)
 
 
