@@ -261,3 +261,35 @@ def test_powershell_installer_rejects_unsafe_version_before_install(tmp_path: Pa
     assert result.returncode != 0
     assert "invalid release version" in result.stderr
     assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.smoke
+def test_powershell_installer_rejects_unknown_target_before_download(tmp_path: Path) -> None:
+    if shutil.which("pwsh") is None:
+        pytest.skip("pwsh is not installed")
+
+    result = subprocess.run(
+        [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            "scripts/install.ps1",
+            "-Version",
+            "latest",
+        ],
+        cwd=_repo_root(),
+        capture_output=True,
+        text=True,
+        env=os.environ
+        | {
+            "ANKICLI_TARGET": "../windows-x64",
+            "ANKICLI_RELEASE_API": (tmp_path / "missing-release.json").as_uri(),
+            "ANKICLI_RELEASES_BASE": (tmp_path / "release").as_uri(),
+            "ANKICLI_INSTALL_ROOT": str(tmp_path / "install"),
+            "ANKICLI_SKIP_VERIFY": "1",
+        },
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "invalid release target" in result.stderr
