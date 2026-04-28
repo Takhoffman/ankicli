@@ -52,6 +52,27 @@ detect_target() {
   printf '%s-%s' "$os_slug" "$arch_slug"
 }
 
+validate_target() {
+  case "$1" in
+    darwin-x64|darwin-arm64|linux-x64) ;;
+    *) fail "invalid release target: $1" ;;
+  esac
+}
+
+validate_version() {
+  value="$1"
+  [ -n "$value" ] || fail "invalid release version: empty"
+  case "$value" in
+    [0-9]*) ;;
+    *) fail "invalid release version: $value" ;;
+  esac
+  case "$value" in
+    *[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz._-]*|*..*)
+      fail "invalid release version: $value"
+      ;;
+  esac
+}
+
 resolve_version() {
   if [ "$VERSION" != "latest" ]; then
     printf '%s' "$VERSION"
@@ -69,6 +90,12 @@ resolve_version() {
   version="$(printf '%s' "$release_json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | head -n 1)"
   [ -n "$version" ] || fail "latest release response did not include a tag_name"
   printf '%s' "$version"
+}
+
+canonical_dir() {
+  path="$1"
+  mkdir -p "$path"
+  (cd "$path" && pwd -P) || fail "could not resolve install directory: $path"
 }
 
 download() {
@@ -105,7 +132,9 @@ main() {
   need curl
 
   target="$(detect_target)"
+  validate_target "$target"
   version="$(resolve_version)"
+  validate_version "$version"
   archive_name="ankicli-$version-$target.tar.gz"
   checksums_name="ankicli-$version-checksums.txt"
   release_tag="v$version"
@@ -126,9 +155,13 @@ main() {
   executable_path="$payload_dir/ankicli"
   [ -x "$executable_path" ] || fail "release archive did not contain ankicli"
 
-  mkdir -p "$INSTALL_ROOT"
+  install_root="$(canonical_dir "$INSTALL_ROOT")"
   mkdir -p "$BIN_DIR"
-  install_dir="$INSTALL_ROOT/$version"
+  install_dir="$install_root/$version"
+  case "$install_dir" in
+    "$install_root"/*) ;;
+    *) fail "resolved install directory escaped install root" ;;
+  esac
   rm -rf "$install_dir"
   mkdir -p "$install_dir"
   cp -R "$payload_dir"/. "$install_dir/"

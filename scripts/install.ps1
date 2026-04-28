@@ -32,6 +32,15 @@ function Resolve-Version {
     return $Release.tag_name.TrimStart("v")
 }
 
+function Assert-ReleaseVersion {
+    param([string]$Candidate)
+
+    if ([string]::IsNullOrWhiteSpace($Candidate) -or $Candidate -notmatch '^[0-9][0-9A-Za-z._-]*$' -or $Candidate.Contains("..")) {
+        Fail "invalid release version: $Candidate"
+    }
+    return $Candidate
+}
+
 function Get-TargetId {
     if ($env:ANKICLI_TARGET) {
         return $env:ANKICLI_TARGET
@@ -44,6 +53,32 @@ function Get-TargetId {
     }
 }
 
+function Assert-TargetId {
+    param([string]$Candidate)
+
+    switch ($Candidate) {
+        "windows-x64" { return $Candidate }
+        default { Fail "invalid release target: $Candidate" }
+    }
+}
+
+function Resolve-InstallChildPath {
+    param(
+        [string]$Root,
+        [string]$Child
+    )
+
+    $RootPath = [System.IO.Path]::GetFullPath($Root)
+    $ChildPath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($RootPath, $Child))
+    $Comparison = [System.StringComparison]::OrdinalIgnoreCase
+    $Separator = [System.IO.Path]::DirectorySeparatorChar
+    $RootPrefix = $RootPath.TrimEnd($Separator) + $Separator
+    if (-not $ChildPath.StartsWith($RootPrefix, $Comparison)) {
+        Fail "resolved install directory escaped install root"
+    }
+    return $ChildPath
+}
+
 function Verify-Checksum {
     param(
         [string]$ArchivePath,
@@ -51,7 +86,10 @@ function Verify-Checksum {
     )
 
     $ArchiveName = [System.IO.Path]::GetFileName($ArchivePath)
-    $Line = Get-Content $ChecksumsPath | Where-Object { $_ -match [regex]::Escape($ArchiveName) } | Select-Object -First 1
+    $Line = Get-Content $ChecksumsPath | Where-Object {
+        $Fields = $_.Trim() -split "\s+"
+        $Fields.Count -ge 2 -and $Fields[1] -eq $ArchiveName
+    } | Select-Object -First 1
     if (-not $Line) {
         Fail "missing checksum for $ArchiveName"
     }
@@ -77,8 +115,8 @@ function Download-File {
     Invoke-WebRequest -Uri $Uri -OutFile $OutFile
 }
 
-$ResolvedVersion = Resolve-Version -Candidate $Version
-$TargetId = Get-TargetId
+$TargetId = Assert-TargetId -Candidate (Get-TargetId)
+$ResolvedVersion = Assert-ReleaseVersion -Candidate (Resolve-Version -Candidate $Version)
 $ArchiveName = "ankicli-$ResolvedVersion-$TargetId.zip"
 $ChecksumsName = "ankicli-$ResolvedVersion-checksums.txt"
 $ReleaseTag = "v$ResolvedVersion"
@@ -106,7 +144,7 @@ if (-not (Test-Path $ExecutablePath)) {
 }
 
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
-$VersionRoot = Join-Path $InstallRoot $ResolvedVersion
+$VersionRoot = Resolve-InstallChildPath -Root $InstallRoot -Child $ResolvedVersion
 if (Test-Path $VersionRoot) {
     Remove-Item $VersionRoot -Recurse -Force
 }
