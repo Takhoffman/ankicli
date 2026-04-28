@@ -35,6 +35,7 @@ from ankicli.app.services import (
     SyncService,
     TagService,
 )
+from ankicli.backends.ankiconnect import AnkiConnectBackend
 from ankicli.backends.python_anki import PythonAnkiBackend
 from ankicli.runtime import (
     SUPPORTED_ANKI_VERSION,
@@ -347,6 +348,12 @@ class _FakeCredentialStore:
         )
 
 
+class _ExplodingCredentialStore(_FakeCredentialStore):
+    def read(self, *, backend_name: str) -> SyncCredential | None:
+        del backend_name
+        raise AssertionError("credential store should not be read")
+
+
 @pytest.mark.unit
 @proves("auth.status", "unit")
 def test_auth_status_reports_stored_credential(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -367,6 +374,21 @@ def test_auth_status_reports_stored_credential(monkeypatch: pytest.MonkeyPatch) 
         "authenticated": True,
         "endpoint": "https://sync",
         "credential_backend": "keyring",
+    }
+
+
+@pytest.mark.unit
+@proves("auth.status", "unit", "failure")
+def test_auth_status_rejects_unsupported_backend_before_credential_read() -> None:
+    with pytest.raises(BackendOperationUnsupportedError) as excinfo:
+        AuthService(
+            AnkiConnectBackend(),
+            credential_store=_ExplodingCredentialStore(),
+        ).status(None)
+
+    assert excinfo.value.details == {
+        "backend": "ankiconnect",
+        "operation": "auth.status",
     }
 
 

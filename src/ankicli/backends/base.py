@@ -13,6 +13,10 @@ class BaseBackend(ABC):
     name = "base"
 
     @abstractmethod
+    def supported_operations(self) -> dict[str, bool]:
+        raise NotImplementedError
+
+    @abstractmethod
     def backend_capabilities(self) -> BackendCapabilities:
         raise NotImplementedError
 

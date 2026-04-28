@@ -55,11 +55,16 @@ def test_shell_installer_supports_versioned_local_release(tmp_path: Path) -> Non
     )
 
     install_bin_dir = tmp_path / "bin"
+    install_root = tmp_path / "install"
     env = os.environ | {
         "VERSION": "1.2.3",
         "ANKICLI_TARGET": "darwin-x64",
         "ANKICLI_RELEASES_BASE": release_root.as_uri(),
         "ANKICLI_INSTALL_BIN_DIR": str(install_bin_dir),
+        "ANKICLI_INSTALL_ROOT": str(install_root),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "LC_CTYPE": "C.UTF-8",
     }
 
     result = subprocess.run(
