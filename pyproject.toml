@@ -33,6 +33,18 @@ ankicli = "ankicli.main:run"
 [tool.hatch.build.targets.wheel]
 packages = ["src/ankicli"]
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "/.agents",
+  "/.pytest_cache",
+  "/.ruff_cache",
+  "/.uv-bootstrap",
+  "/.uv-cache",
+  "/.venv",
+  "/build",
+  "/dist",
+]
+
 [tool.hatch.build.targets.wheel.force-include]
 "CHANGELOG.md" = "ankicli/CHANGELOG.md"
 "bundled-skills" = "ankicli/bundled-skills"
