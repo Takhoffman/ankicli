@@ -15,7 +15,7 @@ def _write_release_version_files(
     *,
     project_version: str,
     package_version: str,
-    site_version: str,
+    site_version: str = "999.0.0",
 ) -> None:
     (tmp_path / "src" / "ankicli").mkdir(parents=True)
     (tmp_path / "site").mkdir()
@@ -68,7 +68,6 @@ def test_release_version_validation_accepts_matching_tag(tmp_path) -> None:
         tmp_path,
         project_version="0.1.2",
         package_version="0.1.2",
-        site_version="0.1.2",
     )
 
     assert validate_release_version(root=tmp_path, tag_name="v0.1.2") == []
@@ -80,7 +79,6 @@ def test_release_version_validation_reports_mismatched_project_files(tmp_path) -
         tmp_path,
         project_version="0.1.1",
         package_version="0.1.1",
-        site_version="0.1.2",
     )
 
     result = validate_release_version(root=tmp_path, tag_name="v0.1.2")

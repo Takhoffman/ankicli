@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import json
 import os
 import sys
 import tomllib
@@ -43,18 +42,12 @@ def _package_version(root: Path) -> str:
     raise ValueError("src/ankicli/__init__.py does not define a string __version__")
 
 
-def _site_version(root: Path) -> str:
-    payload = json.loads((root / "site" / "package.json").read_text(encoding="utf-8"))
-    return str(payload["version"])
-
-
 def validate_release_version(*, root: Path, tag_name: str) -> list[str]:
     tag_version = _tag_version(tag_name)
     versions = {
         "tag": tag_version,
         "pyproject.toml": _pyproject_version(root),
         "src/ankicli/__init__.py": _package_version(root),
-        "site/package.json": _site_version(root),
     }
     mismatches = [
         f"{name} declares {version!r}; expected {tag_version!r}"
@@ -80,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         mismatches = validate_release_version(root=args.repo_root, tag_name=args.tag)
-    except (KeyError, ValueError, OSError, tomllib.TOMLDecodeError, json.JSONDecodeError) as exc:
+    except (KeyError, ValueError, OSError, tomllib.TOMLDecodeError) as exc:
         print(f"Release version validation failed: {exc}", file=sys.stderr)
         return 1
 
