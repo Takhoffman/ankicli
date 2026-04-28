@@ -57,6 +57,8 @@ service layer, JSON-first responses, and a backend seam present from day one.
   - fail on malformed matrix state
   - fail on stale matrix rows, stale proof annotations, or non-collected proof annotations
   - fail when required `unit` or `cli_contract` proof is not satisfied by passed pytest items
+- CI enforces `phase2` by auditing the combined fast-path, fixture-integration, and e2e proof
+  reports after those jobs pass
 - `phase3` is reserved for environments that actually execute the required real-backend proof tiers
 - `scripts/run_matrix_phase3.py` is the explicit higher-assurance runner:
   - run fast-path proof

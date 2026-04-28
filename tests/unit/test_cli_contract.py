@@ -75,6 +75,8 @@ def test_changelog_all_includes_full_markdown(runner) -> None:
 
 
 @pytest.mark.unit
+@proves("workspace.set", "unit", "cli_contract", "safety")
+@proves("workspace.show", "unit", "cli_contract")
 def test_workspace_set_and_show_contract(runner, tmp_path) -> None:
     env = {"ANKICLI_CONFIG_HOME": str(tmp_path)}
 
@@ -101,6 +103,9 @@ def test_workspace_set_and_show_contract(runner, tmp_path) -> None:
 
 
 @pytest.mark.unit
+@proves("workspace.set", "unit", "cli_contract", "safety")
+@proves("workspace.use", "unit", "cli_contract", "safety")
+@proves("workspace.list", "unit", "cli_contract")
 def test_workspace_supports_multiple_roots(runner, tmp_path) -> None:
     env = {"ANKICLI_CONFIG_HOME": str(tmp_path)}
     collection_path = tmp_path / "travel.anki2"
@@ -114,13 +119,17 @@ def test_workspace_supports_multiple_roots(runner, tmp_path) -> None:
             "travel",
             "--collection",
             str(collection_path),
-            "--activate",
         ],
+        env=env,
+    )
+    use_result = runner.invoke(
+        args=["--json", "workspace", "use", "--name", "travel"],
         env=env,
     )
     list_result = runner.invoke(args=["--json", "workspace", "list"], env=env)
 
     assert set_result.exit_code == 0
+    assert use_result.exit_code == 0
     assert list_result.exit_code == 0
     payload = json.loads(list_result.stdout)
     assert payload["data"]["active_workspace"] == "travel"
@@ -136,6 +145,52 @@ def test_workspace_supports_multiple_roots(runner, tmp_path) -> None:
             "backend": None,
         }
     ]
+
+
+@pytest.mark.unit
+@proves("workspace.clear", "unit", "cli_contract", "safety")
+def test_workspace_clear_removes_saved_defaults(runner, tmp_path) -> None:
+    env = {"ANKICLI_CONFIG_HOME": str(tmp_path)}
+
+    set_result = runner.invoke(
+        args=[
+            "--json",
+            "workspace",
+            "set",
+            "--profile",
+            "User 1",
+            "--backend",
+            "ankiconnect",
+        ],
+        env=env,
+    )
+    clear_result = runner.invoke(
+        args=["--json", "workspace", "clear", "--all"],
+        env=env,
+    )
+
+    assert set_result.exit_code == 0
+    assert clear_result.exit_code == 0
+    payload = json.loads(clear_result.stdout)
+    assert payload["data"]["workspace_config"] == {
+        "anki_profile": None,
+        "collection": None,
+        "backend": None,
+    }
+
+
+@pytest.mark.unit
+@proves("workspace.path", "unit", "cli_contract")
+def test_workspace_path_json_contract(runner, tmp_path) -> None:
+    env = {"ANKICLI_CONFIG_HOME": str(tmp_path)}
+
+    result = runner.invoke(args=["--json", "workspace", "path"], env=env)
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["data"]["workspace_root"] == str(tmp_path / "workspaces/default")
+    assert payload["data"]["config_path"] == str(tmp_path / "workspaces/default/config.json")
 
 
 @pytest.mark.unit
@@ -234,6 +289,7 @@ def test_configure_human_output_is_walkthrough(runner, tmp_path) -> None:
 
 
 @pytest.mark.unit
+@proves("skill.list", "unit", "cli_contract")
 def test_skill_list_json_contract(runner) -> None:
     result = runner.invoke(args=["--json", "skill", "list"])
 
@@ -250,6 +306,7 @@ def test_skill_list_json_contract(runner) -> None:
 
 
 @pytest.mark.unit
+@proves("skill.install", "unit", "cli_contract", "safety")
 def test_skill_install_copies_bundled_bundle_to_custom_path(runner, tmp_path) -> None:
     skill_root = tmp_path / "agent-skills"
 
@@ -757,6 +814,17 @@ def test_media_list_without_path_is_structured_error(runner) -> None:
 @proves("media.resolve-path", "unit", "cli_contract", "failure")
 def test_media_resolve_path_without_path_is_structured_error(runner) -> None:
     result = runner.invoke(args=["--json", "media", "resolve-path", "--name", "used.png"])
+
+    assert result.exit_code == 4
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "COLLECTION_REQUIRED"
+
+
+@pytest.mark.unit
+@proves("media.check", "unit", "cli_contract", "failure")
+def test_media_check_without_path_is_structured_error(runner) -> None:
+    result = runner.invoke(args=["--json", "media", "check"])
 
     assert result.exit_code == 4
     payload = json.loads(result.stdout)

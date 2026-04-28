@@ -75,6 +75,48 @@ commands:
     required_proofs: [unit, cli_contract, backend_unit, failure, safety]
     not_applicable_proofs: [parity, real_ankiconnect]
 
+  - command: workspace.path
+    backend_scope: both
+    risk: read
+    required_proofs: [unit, cli_contract]
+    not_applicable_proofs: [safety, parity]
+  - command: workspace.show
+    backend_scope: both
+    risk: read
+    required_proofs: [unit, cli_contract]
+    not_applicable_proofs: [safety, parity]
+  - command: workspace.list
+    backend_scope: both
+    risk: read
+    required_proofs: [unit, cli_contract]
+    not_applicable_proofs: [safety, parity]
+  - command: workspace.use
+    backend_scope: both
+    risk: write
+    required_proofs: [unit, cli_contract, safety]
+    not_applicable_proofs: [parity]
+  - command: workspace.set
+    backend_scope: both
+    risk: write
+    required_proofs: [unit, cli_contract, safety]
+    not_applicable_proofs: [parity]
+  - command: workspace.clear
+    backend_scope: both
+    risk: write
+    required_proofs: [unit, cli_contract, safety]
+    not_applicable_proofs: [parity]
+
+  - command: skill.list
+    backend_scope: both
+    risk: read
+    required_proofs: [unit, cli_contract]
+    not_applicable_proofs: [safety, parity]
+  - command: skill.install
+    backend_scope: both
+    risk: write
+    required_proofs: [unit, cli_contract, safety]
+    not_applicable_proofs: [parity]
+
   - command: profile.list
     backend_scope: python-anki
     risk: read
@@ -251,6 +293,43 @@ commands:
     risk: read
     required_proofs: *read_shared
     not_applicable_proofs: [safety]
+
+  - command: study.start
+    backend_scope: both
+    risk: write
+    required_proofs: [unit, cli_contract, safety]
+    not_applicable_proofs: [parity]
+  - command: study.next
+    backend_scope: both
+    risk: read
+    required_proofs: [unit, cli_contract]
+    not_applicable_proofs: [safety, parity]
+  - command: study.details
+    backend_scope: both
+    risk: read
+    required_proofs: [unit, cli_contract]
+    not_applicable_proofs: [safety, parity]
+  - command: study.reveal
+    backend_scope: both
+    risk: write
+    required_proofs: [unit, cli_contract, safety]
+    not_applicable_proofs: [parity]
+  - command: study.grade
+    backend_scope: both
+    risk: write
+    required_proofs: [unit, cli_contract, safety]
+    not_applicable_proofs: [parity]
+  - command: study.summary
+    backend_scope: both
+    risk: read
+    required_proofs: [unit, cli_contract]
+    not_applicable_proofs: [safety, parity]
+
+  - command: catalog.export
+    backend_scope: both
+    risk: read
+    required_proofs: [unit, cli_contract]
+    not_applicable_proofs: [safety, parity]
 
   - command: export.notes
     backend_scope: both
