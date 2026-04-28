@@ -21,6 +21,7 @@ All notable changes to `ankicli` are documented here.
   download, checksum lookup, extraction, or install replacement.
 - Tightened PowerShell checksum matching to use exact archive-name fields instead of substring
   matches.
+- Thanks to the contributors behind PRs #2, #3, #4, and #5 for the release improvements.
 
 ## 0.1.1 - 2026-04-11
 
