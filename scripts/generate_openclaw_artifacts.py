@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
+import sys
 from pathlib import Path
 
 from ankicli.app.catalog import catalog_snapshot
@@ -9,6 +11,18 @@ from ankicli.app.catalog import catalog_snapshot
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILLS_ROOT = REPO_ROOT / "integrations" / "openclaw-plugin" / "skills"
 REFERENCE_PATH = REPO_ROOT / "docs" / "anki-catalog-reference.md"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate OpenClaw plugin skills and catalog reference docs.",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Fail if generated OpenClaw artifacts are not up to date.",
+    )
+    return parser.parse_args()
 
 
 def render_skill(skill: dict) -> str:
@@ -78,9 +92,13 @@ def render_reference(snapshot: dict) -> str:
                 f"- `{backend_name}` `{workflow_id}` supported: {supported}; "
                 f"unsupported: {unsupported}"
             )
+        action_support_lines.extend(_backend_operation_notes(backend_name, payload))
     error_lines = "\n".join(
         f"- `{entry['code']}`: {entry['description']}" for entry in error_taxonomy
     )
+    support_block = "\n".join(support_lines)
+    action_block = "\n".join(action_lines)
+    action_support_block = "\n".join(action_support_lines)
 
     return (
         "# Generated Anki Catalog Reference\n\n"
@@ -91,11 +109,11 @@ def render_reference(snapshot: dict) -> str:
         "## Plugin Tools\n\n"
         f"{tool_lines}\n\n"
         "## Backend Workflow Support\n\n"
-        f"{'\n'.join(support_lines)}\n\n"
+        f"{support_block}\n\n"
         "## Workflow Actions\n\n"
-        f"{'\n'.join(action_lines)}\n\n"
+        f"{action_block}\n\n"
         "## Backend Action Support\n\n"
-        f"{'\n'.join(action_support_lines)}\n\n"
+        f"{action_support_block}\n\n"
         "## Deck Stats Contract\n\n"
         "- `deck stats` returns `id`, `name`, `note_count`, `card_count`, "
         "`due_count`, `new_count`, `learning_count`, and `review_count`.\n\n"
@@ -125,14 +143,89 @@ def render_reference(snapshot: dict) -> str:
     )
 
 
-def main() -> None:
+def _operation_label(operation_id: str, prefix: str) -> str:
+    return operation_id.removeprefix(prefix).replace("_", "-")
+
+
+def _backend_operation_notes(backend_name: str, payload: dict) -> list[str]:
+    operations = payload.get("operations") or {}
+    media_operations = sorted(
+        operation_id for operation_id in operations if operation_id.startswith("media.")
+    )
+    notes: list[str] = []
+    if media_operations:
+        supported = [
+            _operation_label(operation_id, "media.")
+            for operation_id in media_operations
+            if operations.get(operation_id) is True
+        ]
+        unsupported = [
+            _operation_label(operation_id, "media.")
+            for operation_id in media_operations
+            if operations.get(operation_id) is False
+        ]
+        notes.append(
+            f"- `{backend_name}` media operations supported: {', '.join(supported) or 'none'}; "
+            f"unsupported: {', '.join(unsupported) or 'none'}"
+        )
+    remote_families = ("auth.", "sync.", "backup.")
+    remote_operations = [
+        operation_id
+        for operation_id in operations
+        if operation_id.startswith(remote_families)
+    ]
+    if remote_operations and not any(
+        operations.get(operation_id) for operation_id in remote_operations
+    ):
+        notes.append(
+            f"- `{backend_name}` does not support auth, sync, or backup flows; "
+            "use `python-anki` for those"
+        )
+    return notes
+
+
+def generated_artifacts(snapshot: dict) -> dict[Path, str]:
+    artifacts = {
+        SKILLS_ROOT / skill["slug"] / "SKILL.md": render_skill(skill)
+        for skill in snapshot["skills"]
+    }
+    artifacts[REFERENCE_PATH] = render_reference(snapshot)
+    return artifacts
+
+
+def write_artifacts(artifacts: dict[Path, str]) -> None:
+    for path, content in artifacts.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+
+def check_artifacts(artifacts: dict[Path, str]) -> list[Path]:
+    stale: list[Path] = []
+    for path, expected in artifacts.items():
+        if not path.exists() or path.read_text(encoding="utf-8") != expected:
+            stale.append(path)
+    return stale
+
+
+def main() -> int:
+    args = parse_args()
     snapshot = catalog_snapshot()
-    for skill in snapshot["skills"]:
-        skill_dir = SKILLS_ROOT / skill["slug"]
-        skill_dir.mkdir(parents=True, exist_ok=True)
-        (skill_dir / "SKILL.md").write_text(render_skill(skill), encoding="utf-8")
-    REFERENCE_PATH.write_text(render_reference(snapshot), encoding="utf-8")
+    artifacts = generated_artifacts(snapshot)
+    if args.check:
+        stale = check_artifacts(artifacts)
+        if stale:
+            print("Generated OpenClaw artifacts are out of date:", file=sys.stderr)
+            for path in stale:
+                print(f"  - {path.relative_to(REPO_ROOT)}", file=sys.stderr)
+            print(
+                "Run `uv run python scripts/generate_openclaw_artifacts.py`.",
+                file=sys.stderr,
+            )
+            return 1
+        return 0
+    write_artifacts(artifacts)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

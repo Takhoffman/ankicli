@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,22 @@ def test_openclaw_plugin_catalog_generation_contract() -> None:
         text=True,
         check=False,
     )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.unit
+def test_generated_openclaw_artifacts_match_catalog() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    script_path = repo_root / "scripts" / "generate_openclaw_artifacts.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--check"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
     assert result.returncode == 0, result.stdout + result.stderr
 
 
