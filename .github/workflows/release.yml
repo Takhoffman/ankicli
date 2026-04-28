@@ -9,7 +9,15 @@ permissions:
   contents: write
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release version
+        run: python3 scripts/validate_release_version.py --tag "$GITHUB_REF_NAME"
+
   build:
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -53,11 +61,15 @@ jobs:
           mkdir -p release-final
           find release-artifacts -type f ! -name '*checksums.txt' -exec cp {} release-final/ \;
           cat release-artifacts/*checksums.txt > release-final/ankicli-${GITHUB_REF_NAME#v}-checksums.txt
-      - name: Create GitHub Release
+      - name: Publish GitHub Release Assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-final/* --generate-notes --verify-tag
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-final/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-final/* --generate-notes --verify-tag
+          fi
 
   publish-pypi:
     runs-on: ubuntu-latest
@@ -73,3 +85,5 @@ jobs:
         run: uv build
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
