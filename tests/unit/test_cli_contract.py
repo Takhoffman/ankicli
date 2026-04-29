@@ -45,9 +45,9 @@ def test_changelog_reports_latest_section_for_humans(runner) -> None:
     result = runner.invoke(args=["changelog"])
 
     assert result.exit_code == 0
-    assert result.stdout.startswith("## 0.1.2")
+    assert result.stdout.startswith("## 0.1.3")
     assert "# Changelog" not in result.stdout
-    assert "Hardened release automation" in result.stdout
+    assert "Enforced the quality-matrix audit" in result.stdout
 
 
 @pytest.mark.unit
@@ -57,9 +57,9 @@ def test_changelog_json_contract(runner) -> None:
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
-    assert payload["data"]["title"].startswith("0.1.2")
+    assert payload["data"]["title"].startswith("0.1.3")
     assert payload["data"]["full"] is False
-    assert payload["data"]["content"].startswith("## 0.1.2")
+    assert payload["data"]["content"].startswith("## 0.1.3")
     assert payload["data"]["source"]
 
 

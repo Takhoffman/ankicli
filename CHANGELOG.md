@@ -4,6 +4,19 @@ All notable changes to `ankicli` are documented here.
 
 ## Unreleased
 
+## 0.1.3 - 2026-04-29
+
+- Enforced the quality-matrix audit as a blocking CI gate across fast-path, fixture, and e2e proof
+  reports. Thanks @stanlu.
+- Added matrix coverage for workspace, skill, study, catalog export, and missing media failure
+  contracts. Thanks @stanlu.
+- Made the OpenClaw plugin contract portable on Windows, including `.cmd`/`.bat` command shims and
+  Windows-style `ankicliPath` handling. Thanks @stanlu.
+- Improved the phase3 matrix runner with labeled commands, reusable report directories, and clearer
+  real-backend setup guidance. Thanks @stanlu.
+- Added generated OpenClaw artifact freshness checks so catalog reference docs and bundled study
+  skill guidance stay in sync with `ankicli.app.catalog`. Thanks @stanlu.
+
 ## 0.1.2 - 2026-04-28
 
 - Hardened release automation so tag/version mismatches fail before platform builds or publish
