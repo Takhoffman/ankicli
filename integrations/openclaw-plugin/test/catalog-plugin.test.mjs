@@ -342,7 +342,7 @@ test("buildCliArgv preserves Windows collection paths as one argv value", () => 
     buildCliArgv(
       {
         backend: "python-anki",
-        collectionPath: "C:\\Users\\Ada Lovelace\\Anki\\User 1\\collection.anki2",
+        collectionPath: "C:\\Users\\User One\\Anki\\User 1\\collection.anki2",
       },
       ["collection", "info"],
     ),
@@ -351,7 +351,7 @@ test("buildCliArgv preserves Windows collection paths as one argv value", () => 
       "--backend",
       "python-anki",
       "--collection",
-      "C:\\Users\\Ada Lovelace\\Anki\\User 1\\collection.anki2",
+      "C:\\Users\\User One\\Anki\\User 1\\collection.anki2",
       "collection",
       "info",
     ],
