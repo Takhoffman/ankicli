@@ -92,7 +92,12 @@ def test_catalog_derives_backend_operations_and_workflows() -> None:
 
 
 @pytest.mark.unit
-@proves("study.start", "unit")
+@proves("study.start", "unit", "safety")
+@proves("study.next", "unit")
+@proves("study.details", "unit")
+@proves("study.reveal", "unit", "safety")
+@proves("study.grade", "unit", "safety")
+@proves("study.summary", "unit")
 def test_study_service_tracks_local_session_lifecycle(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -227,6 +232,7 @@ def test_study_service_tracks_local_session_lifecycle(
 
 
 @pytest.mark.unit
+@proves("study.start", "unit", "cli_contract", "safety")
 def test_study_start_cli_returns_structured_payload(
     runner,
     monkeypatch: pytest.MonkeyPatch,
@@ -288,6 +294,7 @@ def test_study_start_cli_returns_structured_payload(
 
 
 @pytest.mark.unit
+@proves("study.details", "unit", "cli_contract")
 def test_study_details_cli_returns_revealed_payload(
     runner,
     monkeypatch: pytest.MonkeyPatch,
@@ -330,6 +337,83 @@ def test_study_details_cli_returns_revealed_payload(
     assert "answer" not in payload["data"]["current_card"]
     assert payload["data"]["current_card"]["tutoring_summary"]["reveal_state"] == "front_only"
     assert payload["data"]["current_card"]["study_view"]["rendered_back_html"] is None
+
+
+@pytest.mark.unit
+@proves("study.next", "unit", "cli_contract")
+@proves("study.reveal", "unit", "cli_contract", "safety")
+@proves("study.grade", "unit", "cli_contract", "safety")
+@proves("study.summary", "unit", "cli_contract")
+def test_study_cli_session_actions_return_structured_payload(
+    runner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from ankicli import main as main_module
+
+    state_dir = tmp_path / "state"
+    collection_path = tmp_path / "collection.anki2"
+    collection_path.write_text("fixture")
+    monkeypatch.setenv("ANKICLI_STATE_DIR", str(state_dir))
+    monkeypatch.setattr(main_module, "get_backend", lambda backend_name: _StudyBackend())
+
+    start_result = runner.invoke(
+        args=[
+            "--json",
+            "--collection",
+            str(collection_path),
+            "study",
+            "start",
+            "--deck",
+            "Spanish",
+            "--scope-preset",
+            "due",
+            "--limit",
+            "2",
+        ],
+    )
+    assert start_result.exit_code == 0
+    session_id = json.loads(start_result.stdout)["data"]["session"]["id"]
+
+    next_result = runner.invoke(args=["--json", "study", "next", "--session-id", session_id])
+    reveal_result = runner.invoke(
+        args=["--json", "study", "reveal", "--session-id", session_id],
+    )
+    grade_result = runner.invoke(
+        args=[
+            "--json",
+            "study",
+            "grade",
+            "--session-id",
+            session_id,
+            "--rating",
+            "good",
+        ],
+    )
+    summary_result = runner.invoke(
+        args=["--json", "study", "summary", "--session-id", session_id],
+    )
+
+    assert next_result.exit_code == 0
+    next_payload = json.loads(next_result.stdout)
+    assert next_payload["data"]["current_card"]["card_id"] == 201
+    assert next_payload["data"]["current_card"]["revealed"] is False
+
+    assert reveal_result.exit_code == 0
+    reveal_payload = json.loads(reveal_result.stdout)
+    assert reveal_payload["data"]["current_card"]["answer"] == EXPECTED_ANSWER
+    assert reveal_payload["data"]["current_card"]["revealed"] is True
+
+    assert grade_result.exit_code == 0
+    grade_payload = json.loads(grade_result.stdout)
+    assert grade_payload["data"]["graded_card"]["rating"] == "good"
+    assert grade_payload["data"]["next_card"]["card_id"] == 202
+    assert grade_payload["data"]["session"]["writes_back_to_anki"] is False
+
+    assert summary_result.exit_code == 0
+    summary_payload = json.loads(summary_result.stdout)
+    assert summary_payload["data"]["session"]["grade_counts"]["good"] == 1
+    assert summary_payload["data"]["session"]["remaining_count"] == 1
 
 
 @pytest.mark.unit
@@ -506,6 +590,7 @@ def test_preview_spec_rewrites_anki_play_macros_and_local_asset_refs(
 
 
 @pytest.mark.unit
+@proves("catalog.export", "unit", "cli_contract")
 def test_catalog_export_cli_returns_runtime_support(runner) -> None:
     result = runner.invoke(args=["--json", "--backend", "ankiconnect", "catalog", "export"])
 
