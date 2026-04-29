@@ -65,6 +65,7 @@ service layer, JSON-first responses, and a backend seam present from day one.
   - run fixture-integration proof
   - run disposable real `python-anki` backup/profile proof
   - audit all resulting proof reports together under `phase3`
+  - use `--reports-dir` or `--keep-reports` when debugging failed proof aggregation
 
 ## Development Policy
 
